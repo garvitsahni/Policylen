@@ -1,0 +1,173 @@
+{
+  "_comment": "Structured version of docs/taxonomy.md. This file IS the specification for the deterministic flag-matching engine (see architecture.md §6). Do not let the LLM re-derive these rules at runtime — it only fills the templates with extracted values. Edit taxonomy.md and this file together; they must never drift apart.",
+  "scoreWeights": {
+    "base": 100,
+    "min": 0,
+    "max": 100,
+    "severityPenalty": { "critical": 25, "high": 15, "medium": 8, "low": 3 },
+    "greenBonus": 5,
+    "greenBonusCap": 15
+  },
+  "redFlags": [
+    {
+      "id": "R01",
+      "name": "Room rent capping",
+      "severity": "high",
+      "requiredFields": ["room_rent_cap_value", "room_rent_proportionate_deduction"],
+      "triggerCondition": "room_rent_clause.capType in ['percent_of_sum_insured','fixed_per_day'] AND room_rent_clause.proportionateDeduction == true",
+      "template": "Your room rent is capped at {cap_value}. If you choose a room above this, the insurer proportionately reduces your ENTIRE claim, not just the room charge — this can cut a large claim significantly."
+    },
+    {
+      "id": "R02",
+      "name": "Disease-specific sub-limit",
+      "severity": "critical",
+      "requiredFields": ["sum_insured", "procedure_name", "sub_limit_value"],
+      "triggerCondition": "sub_limits[] contains an entry where sub_limit_value < sum_insured",
+      "template": "Your policy advertises {sum_insured} cover, but {procedure} is capped at {sub_limit_value}. You would pay the difference out of pocket."
+    },
+    {
+      "id": "R03",
+      "name": "Co-payment clause",
+      "severity": "high",
+      "requiredFields": ["co_pay_pct"],
+      "triggerCondition": "co_pay.pct > 0 (check age-band applicability if specified)",
+      "template": "You pay {co_pay_pct}% of every approved claim yourself. On a ₹2,00,000 claim, that's ₹{calculated_amount} from your pocket."
+    },
+    {
+      "id": "R04",
+      "name": "Pre-existing disease (PED) waiting period",
+      "severity": "critical",
+      "requiredFields": ["ped_waiting_period_months"],
+      "triggerCondition": "ped_waiting_period_months > 24",
+      "template": "Conditions you already have won't be covered for {waiting_period} from policy start. A claim related to {condition} during this period will be rejected."
+    },
+    {
+      "id": "R05",
+      "name": "Initial waiting period",
+      "severity": "medium",
+      "requiredFields": ["initial_waiting_period_days"],
+      "triggerCondition": "initial_waiting_period_days >= 30 (standard clause, always check for presence)",
+      "template": "Almost no claim (except accidental injury) is payable in the first 30 days of this policy."
+    },
+    {
+      "id": "R06",
+      "name": "Specific disease/procedure waiting period",
+      "severity": "high",
+      "requiredFields": ["procedure_name", "waiting_period_months"],
+      "triggerCondition": "named_procedure_waiting_periods[] contains an entry with waiting_period_months in [12,24]",
+      "template": "{procedure} isn't covered until {waiting_period} into the policy, even though it's not a pre-existing condition."
+    },
+    {
+      "id": "R07",
+      "name": "Material non-disclosure clause",
+      "severity": "critical",
+      "requiredFields": ["non_disclosure_clause_present"],
+      "triggerCondition": "non_disclosure_clause_present == true AND scope == 'broad_any_non_disclosure'",
+      "template": "If any information in your application is later found incomplete — even unintentionally — the insurer can reject your claim or cancel the policy entirely."
+    },
+    {
+      "id": "R08",
+      "name": "\"Sole discretion\" / undefined-term language",
+      "severity": "medium",
+      "requiredFields": ["discretionary_language_excerpt"],
+      "triggerCondition": "raw_text matches discretionary-language patterns (e.g. 'reasonable and customary', 'sole discretion of the Company') AND term is undefined in the policy's definitions section",
+      "template": "This clause lets the insurer decide what counts as a valid or 'reasonable' charge without a defined standard — a common source of claim disputes."
+    },
+    {
+      "id": "R09",
+      "name": "Sub-limit on ambulance/daycare/pre-post hospitalization",
+      "severity": "low",
+      "requiredFields": ["ancillary_type", "ancillary_cap_value"],
+      "triggerCondition": "ancillary_sub_limits[] non-empty for ambulance|daycare|pre_post_hospitalization",
+      "template": "Ambulance/daycare charges are capped at {value}, separate from your main hospitalization cover."
+    },
+    {
+      "id": "R10",
+      "name": "Non-network hospital reduced payout",
+      "severity": "medium",
+      "requiredFields": ["non_network_reduction_pct_or_terms"],
+      "triggerCondition": "network_clause.non_network_payout_reduced == true",
+      "template": "If you're treated at a hospital outside {insurer}'s network, your payout could be reduced or require full upfront payment and reimbursement instead of cashless."
+    },
+    {
+      "id": "R11",
+      "name": "Renewal non-guarantee / loading clause",
+      "severity": "medium",
+      "requiredFields": ["renewal_loading_clause_present"],
+      "triggerCondition": "renewal_clause.claims_based_loading == true OR renewal_clause.guaranteed_renewal == false",
+      "template": "Making a claim this year could lead to a higher premium or added conditions at renewal — this isn't guaranteed to stay the same."
+    },
+    {
+      "id": "R12",
+      "name": "Permanent exclusions list",
+      "severity": "high",
+      "requiredFields": ["excluded_condition_name"],
+      "triggerCondition": "permanent_exclusions[] non-empty",
+      "template": "{condition_or_treatment} is permanently excluded from this policy — it will never be covered, regardless of waiting period."
+    },
+    {
+      "id": "R13",
+      "name": "Claim intimation deadline",
+      "severity": "medium",
+      "requiredFields": ["intimation_deadline_hours"],
+      "triggerCondition": "intimation_deadline_hours <= 48",
+      "template": "You must inform the insurer within {timeframe} of hospitalization or risk claim rejection on procedural grounds, even if the treatment itself was valid."
+    }
+  ],
+  "greenFlags": [
+    {
+      "id": "G01",
+      "name": "No room rent capping",
+      "requiredFields": [],
+      "triggerCondition": "room_rent_clause.explicitlyUncapped == true",
+      "template": "There's no cap on your room choice — you can pick any room category without a proportional claim cut."
+    },
+    {
+      "id": "G02",
+      "name": "No co-payment",
+      "requiredFields": [],
+      "triggerCondition": "co_pay.explicitlyAbsentForBuyerAgeBand == true",
+      "template": "You don't pay any percentage of your claims yourself — the full approved amount is covered."
+    },
+    {
+      "id": "G03",
+      "name": "Short PED waiting period",
+      "requiredFields": ["ped_waiting_period_months"],
+      "triggerCondition": "ped_waiting_period_months <= 24 AND explicitly_stated == true",
+      "template": "Pre-existing conditions are covered after just {waiting_period} — shorter than many comparable policies."
+    },
+    {
+      "id": "G04",
+      "name": "Restoration/refill benefit",
+      "requiredFields": [],
+      "triggerCondition": "restoration_benefit.present == true",
+      "template": "If you exhaust your cover, it automatically refills — you're not left uncovered for the rest of the year."
+    },
+    {
+      "id": "G05",
+      "name": "No sub-limits on named procedures",
+      "requiredFields": [],
+      "triggerCondition": "explicit_statement_no_sub_limits == true",
+      "template": "Major procedures like {examples} are covered up to your full sum insured, with no hidden sub-limit."
+    },
+    {
+      "id": "G06",
+      "name": "Cumulative bonus / no-claim bonus",
+      "requiredFields": [],
+      "triggerCondition": "cumulative_bonus.present == true",
+      "template": "Your cover grows automatically for every year you don't claim, at no extra cost."
+    },
+    {
+      "id": "G07",
+      "name": "Wide hospital network with cashless",
+      "requiredFields": [],
+      "triggerCondition": "network_clause.cashless_default == true AND network_size_stated == true",
+      "template": "You can get cashless treatment at a wide network of hospitals — no need to pay upfront and claim reimbursement later."
+    }
+  ],
+  "rules": {
+    "absenceOfRedIsNotGreen": "Green flags require the explicit favorable clause text to be present. Never infer a green flag purely from the absence of a matching red flag.",
+    "multiTrigger": "A single extracted clause may trigger multiple flags (e.g. a sub-limited procedure that also has its own waiting period triggers both R02 and R06).",
+    "scope": "Individual/family floater health insurance only. Do not reuse for motor, term, life, or group/corporate health without a new taxonomy pass."
+  }
+}

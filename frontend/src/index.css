@@ -1,0 +1,225 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #FAF6EC;
+  --color-kraft: #E4D8B4;
+  --color-stamp-navy: #16283D;
+
+  --color-surface: #faf9fc;
+  --color-surface-dim: #dad9dd;
+  --color-surface-bright: #faf9fc;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f4f3f7;
+  --color-surface-container: #eeedf1;
+  --color-surface-container-high: #e9e7eb;
+  --color-surface-container-highest: #e3e2e6;
+  --color-surface-variant: #e3e2e6;
+  --color-on-surface: #1a1c1e;
+  --color-on-surface-variant: #43474e;
+  --color-inverse-surface: #2f3033;
+  --color-inverse-on-surface: #f1f0f4;
+
+  --color-outline: #74777f;
+  --color-outline-variant: #c4c6cf;
+  --color-surface-tint: #455f87;
+
+  --color-primary: #022448;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1e3a5f;
+  --color-on-primary-container: #8aa4cf;
+  --color-inverse-primary: #adc8f5;
+  --color-primary-fixed: #d5e3ff;
+  --color-primary-fixed-dim: #adc8f5;
+  --color-on-primary-fixed: #001c3b;
+  --color-on-primary-fixed-variant: #2d486d;
+
+  --color-secondary: #665e41;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #eee2bd;
+  --color-on-secondary-container: #6d6447;
+  --color-on-secondary-fixed-variant: #4e462c;
+  --color-secondary-fixed: #eee2bd;
+  --color-secondary-fixed-dim: #d2c6a3;
+  --color-on-secondary-fixed: #211b05;
+
+  --color-tertiary: #122439;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #293a50;
+  --color-on-tertiary-container: #92a4be;
+  --color-tertiary-fixed: #d2e4ff;
+  --color-tertiary-fixed-dim: #b6c8e3;
+  --color-on-tertiary-fixed: #091c31;
+  --color-on-tertiary-fixed-variant: #37485e;
+
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-background: #faf9fc;
+  --color-on-background: #1a1c1e;
+
+  --spacing-unit: 4px;
+  --spacing-container-max: 1200px;
+  --spacing-margin-desktop: 48px;
+  --spacing-margin-mobile: 16px;
+  --spacing-gutter: 16px;
+
+  --font-size-body-md: 16px;
+  --font-size-body-md--line-height: 24px;
+  --font-size-body-md--font-weight: 400;
+  --font-size-figure-mono: 16px;
+  --font-size-figure-mono--line-height: 24px;
+  --font-size-figure-mono--font-weight: 700;
+  --font-size-label-md: 14px;
+  --font-size-label-md--line-height: 20px;
+  --font-size-label-md--letter-spacing: 0.05em;
+  --font-size-label-md--font-weight: 600;
+  --font-size-headline-md: 24px;
+  --font-size-headline-md--line-height: 32px;
+  --font-size-headline-md--font-weight: 600;
+  --font-size-headline-lg: 32px;
+  --font-size-headline-lg--line-height: 40px;
+  --font-size-headline-lg--font-weight: 700;
+  --font-size-body-lg: 18px;
+  --font-size-body-lg--line-height: 28px;
+  --font-size-body-lg--font-weight: 400;
+  --font-size-display-lg: 48px;
+  --font-size-display-lg--line-height: 56px;
+  --font-size-display-lg--letter-spacing: -0.02em;
+  --font-size-display-lg--font-weight: 700;
+
+  --font-body-md: "Noto Sans", sans-serif;
+  --font-figure-mono: "Noto Sans", monospace;
+  --font-label-md: "Noto Sans", sans-serif;
+  --font-headline-md: "Noto Serif", serif;
+  --font-headline-lg: "Noto Serif", serif;
+  --font-body-lg: "Noto Sans", sans-serif;
+  --font-display-lg: "Noto Serif", serif;
+  --font-serif: "Noto Serif", serif;
+  --font-sans: "Noto Sans", sans-serif;
+  --font-mono: "Noto Sans", monospace;
+  --font-serif-devanagari: "Noto Serif Devanagari", serif;
+  --font-sans-devanagari: "Noto Sans Devanagari", sans-serif;
+
+  --radius-default: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
+}
+
+@layer base {
+  :root {
+    --bg: var(--color-paper);
+    --text: var(--color-primary);
+  }
+  body {
+    @apply bg-paper text-on-surface antialiased m-0;
+    font-family: "Noto Sans", sans-serif;
+  }
+  html {
+    font-family: "Noto Sans", sans-serif;
+  }
+}
+
+@layer utilities {
+  .font-serif-custom { font-family: "Noto Serif", serif; }
+  .font-serif-devanagari { font-family: "Noto Serif Devanagari", serif; }
+  .font-sans-devanagari { font-family: "Noto Sans Devanagari", sans-serif; }
+  .font-mono-custom { font-family: "Noto Sans", monospace; font-weight: 700; }
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+
+  .stamp-effect {
+    border: 2px solid currentColor;
+    padding: 2px 8px;
+    transform: rotate(-5deg);
+    opacity: 0.92;
+    mix-blend-mode: multiply;
+    user-select: none;
+  }
+
+  .ink-stamp {
+    opacity: 0.92;
+    filter: contrast(1.2) sepia(0.2);
+    mix-blend-mode: multiply;
+  }
+
+  .dot-leader {
+    display: flex;
+    align-items: baseline;
+  }
+  .dot-leader::after {
+    content: " .....................................................................................................................................................................................";
+    white-space: nowrap;
+    overflow: hidden;
+    flex-grow: 1;
+    padding: 0 8px;
+    color: #74777f;
+    opacity: 0.5;
+  }
+
+  .ledger-line {
+    background-image: linear-gradient(to bottom, transparent 23px, #cbd5e1 23px);
+    background-size: 100% 24px;
+  }
+
+  .view-transition {
+    transition: opacity 0.5s ease-in-out, transform 0.5s ease-out;
+  }
+  .hidden-view {
+    display: none;
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@layer components {
+  .premium-card {
+    @apply bg-paper border border-kraft rounded-xl;
+    box-shadow: 0 1px 2px rgba(30, 58, 95, 0.04), 0 4px 8px rgba(30, 58, 95, 0.06);
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+  }
+  .premium-card:hover {
+    box-shadow: 0 1px 2px rgba(30, 58, 95, 0.04), 0 8px 16px rgba(30, 58, 95, 0.08), 0 16px 24px rgba(30, 58, 95, 0.04);
+  }
+
+  .premium-button {
+    @apply relative overflow-hidden;
+    transition: transform 0.15s ease;
+  }
+  .premium-button:active { transform: scale(0.97); }
+  .premium-button::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .gauge-empty { stroke: #E4D8B4; stroke-width: 8; fill: none; }
+  .gauge-fill { stroke-width: 8; fill: none; stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(0.33, 1, 0.68, 1); }
+  .text-shadow-premium { text-shadow: 0 1px 2px rgba(30, 58, 95, 0.1); }
+
+  .offset-shadow {
+    box-shadow: 4px 4px 0px 0px rgba(2, 36, 72, 1);
+  }
+
+  .offset-shadow-sm {
+    box-shadow: 2px 2px 0px 0px rgba(2, 36, 72, 1);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, rgba(228, 216, 180, 0.3) 25%, rgba(228, 216, 180, 0.6) 50%, rgba(228, 216, 180, 0.3) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}

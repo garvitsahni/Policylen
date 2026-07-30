@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.env
+uploads/
+tmp_extracts/
+ai-service/venv/
+ai-service/__pycache__/
+ai-service/app/__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+*.log
+backend/src/flag-engine/*.js

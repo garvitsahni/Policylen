@@ -1,0 +1,31 @@
+{
+  "_comment": "Static reference dataset per PRD.md §7 and architecture.md §9 — loaded at deploy time, never fetched live, never blended into the Policy Health Score arithmetic (architecture.md §7). Figures below are Incurred Claim Ratios (ICR) for the health segment, FY2024-25, as reported from the IRDAI Annual Report 2024-25 by Business Standard (Jan 2026). ICR = net incurred claims / net earned premium — a portfolio-level payout indicator, not a per-claim settlement probability. Before shipping beyond a hackathon demo, replace/verify every figure directly against the published IRDAI Annual Report PDF and re-cite the source and reporting period in this file.",
+  "sourceLabel": "IRDAI Annual Report 2024-25 (Health segment ICR)",
+  "reportingPeriod": "FY 2024-25",
+  "lastVerified": "2026-07-29",
+  "industryContext": {
+    "publicSectorGeneralInsurersICR": 97.30,
+    "privateGeneralInsurersICR": 77.50,
+    "note": "Public-sector general insurers ran a markedly higher incurred-claim ratio than private insurers in FY24-25; standalone health insurers as a class have historically run lower ratios than private general insurers with a health book, per prior-year IRDAI data. Treat category-level context as directional, not a per-policy guarantee."
+  },
+  "insurers": [
+    { "insurerName": "Acko General Insurance", "icrPct": 57.82 },
+    { "insurerName": "Bajaj Allianz General Insurance", "icrPct": 87.31 },
+    { "insurerName": "Cholamandalam MS General Insurance", "icrPct": 73.04 },
+    { "insurerName": "Future Generali India Insurance", "icrPct": 95.29 },
+    { "insurerName": "Go Digit General Insurance", "icrPct": 83.78 },
+    { "insurerName": "HDFC ERGO General Insurance", "icrPct": 84.85 },
+    { "insurerName": "ICICI Lombard General Insurance", "icrPct": 82.24 },
+    { "insurerName": "IFFCO Tokio General Insurance", "icrPct": 83.74 },
+    { "insurerName": "Kshema General Insurance", "icrPct": 40.03 },
+    { "insurerName": "Liberty General Insurance", "icrPct": 92.99 },
+    { "insurerName": "Magma General Insurance", "icrPct": 85.54 },
+    { "insurerName": "Navi General Insurance", "icrPct": 101.89 },
+    { "insurerName": "Raheja QBE General Insurance", "icrPct": 105.12 },
+    { "insurerName": "Reliance General Insurance", "icrPct": 87.34 },
+    { "insurerName": "Royal Sundaram General Insurance", "icrPct": 95.56 },
+    { "insurerName": "SBI General Insurance", "icrPct": 82.19 },
+    { "insurerName": "Shriram General Insurance", "icrPct": 74.55 }
+  ],
+  "matchingNotes": "Match Document.insurerName against insurerName here using a normalized/fuzzy match (strip 'General Insurance', 'Ltd', case-fold) — extracted insurer names from PDFs will rarely match this list verbatim. If no match is found, PolicyHealthScore.settlementRatio must be null and the UI must show 'insurer reference data not available' rather than guessing or defaulting to an industry average presented as insurer-specific."
+}

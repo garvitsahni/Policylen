@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Document {
+  id           String   @id @default(uuid())
+  userId       String?
+  fileName     String
+  status       String   @default("uploaded")
+  insurerName  String?
+  sumInsured   Int?
+  uploadedAt   DateTime @default(now())
+  clauses      ExtractedClause[]
+  flags        Flag[]
+  score        PolicyHealthScore?
+  chunks       DocumentChunk[]
+  chatMessages ChatMessage[]
+}
+
+model ExtractedClause {
+  id         String   @id @default(uuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  clauseType String
+  rawText    String
+  pageNumber Int?
+  fieldsJson Json
+  confidence String
+}
+
+model Flag {
+  id             String   @id @default(uuid())
+  documentId    String
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  clauseId      String?
+  taxonomyId    String
+  colorType     String
+  severity      String?
+  explanation   String
+  rupeeAtRisk   Int?
+  sourceExcerpt String
+  verified      Boolean  @default(true)
+}
+
+model PolicyHealthScore {
+  id              String   @id @default(uuid())
+  documentId      String   @unique
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  score           Int
+  breakdown       Json
+  settlementRatio Float?
+}
+
+model DocumentChunk {
+  id         String   @id @default(uuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkText  String
+  embedding  Unsupported("text")  // Use text until pgvector is installed
+}
+
+model ChatMessage {
+  id                 String   @id @default(uuid())
+  documentId         String
+  document           Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  role               String
+  content            String
+  groundedInDocument Boolean?
+  citedClauseId      String?
+  createdAt          DateTime @default(now())
+}

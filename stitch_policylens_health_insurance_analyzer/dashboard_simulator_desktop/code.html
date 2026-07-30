@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PolicyLens AI | Results Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&family=Noto+Serif:wght@600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@100..900&family=Noto+Serif:wght@100..900&display=swap" rel="stylesheet"/>
+<!-- Tailwind Config Verbatim -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "inverse-on-surface": "#f1f0f4",
+                    "on-secondary-fixed-variant": "#4e462c",
+                    "secondary-fixed-dim": "#d2c6a3",
+                    "surface": "#faf9fc",
+                    "primary": "#022448",
+                    "secondary": "#665e41",
+                    "on-tertiary": "#ffffff",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-fixed-dim": "#adc8f5",
+                    "tertiary": "#122439",
+                    "on-error-container": "#93000a",
+                    "on-secondary-container": "#6d6447",
+                    "secondary-container": "#eee2bd",
+                    "surface-dim": "#dad9dd",
+                    "on-primary-container": "#8aa4cf",
+                    "on-primary": "#ffffff",
+                    "inverse-primary": "#adc8f5",
+                    "tertiary-fixed": "#d2e4ff",
+                    "surface-container": "#eeedf1",
+                    "inverse-surface": "#2f3033",
+                    "on-secondary-fixed": "#211b05",
+                    "on-tertiary-fixed": "#091c31",
+                    "on-surface": "#1a1c1e",
+                    "background": "#faf9fc",
+                    "on-tertiary-container": "#92a4be",
+                    "outline-variant": "#c4c6cf",
+                    "surface-container-high": "#e9e7eb",
+                    "on-primary-fixed-variant": "#2d486d",
+                    "error": "#ba1a1a",
+                    "primary-container": "#1e3a5f",
+                    "on-background": "#1a1c1e",
+                    "surface-container-low": "#f4f3f7",
+                    "secondary-fixed": "#eee2bd",
+                    "on-primary-fixed": "#001c3b",
+                    "on-error": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "surface-tint": "#455f87",
+                    "primary-fixed": "#d5e3ff",
+                    "on-tertiary-fixed-variant": "#37485e",
+                    "tertiary-container": "#293a50",
+                    "on-secondary": "#ffffff",
+                    "outline": "#74777f",
+                    "surface-variant": "#e3e2e6",
+                    "surface-container-highest": "#e3e2e6",
+                    "on-surface-variant": "#43474e",
+                    "tertiary-fixed-dim": "#b6c8e3",
+                    "surface-bright": "#faf9fc",
+                    "kraft": "#E4D8B4",
+                    "paper": "#FAF6EC"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "container-max": "1200px",
+                    "margin-desktop": "48px",
+                    "margin-mobile": "16px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "body-md": ["Noto Sans"],
+                    "figure-mono": ["Noto Sans"],
+                    "label-md": ["Noto Sans"],
+                    "display-lg": ["Noto Serif"],
+                    "headline-md": ["Noto Serif"],
+                    "headline-lg-mobile": ["Noto Serif"],
+                    "body-lg": ["Noto Sans"],
+                    "headline-lg": ["Noto Serif"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "figure-mono": ["16px", {"lineHeight": "24px", "fontWeight": "700"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .stamp-effect {
+            border: 2px solid currentColor;
+            padding: 2px 8px;
+            transform: rotate(-5deg);
+            opacity: 0.92;
+            mix-blend-mode: multiply;
+            user-select: none;
+        }
+        .ledger-line {
+            background-image: linear-gradient(to bottom, transparent 23px, #cbd5e1 23px);
+            background-size: 100% 24px;
+        }
+        .dot-leader::after {
+            content: " .....................................................................................................................................................................................";
+            white-space: nowrap;
+            overflow: hidden;
+            flex-grow: 1;
+            padding: 0 8px;
+            color: #74777f;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-inverse-surface border-b border-primary dark:border-outline-variant docked full-width top-0 z-50">
+<div class="flex justify-between items-center w-full px-margin-desktop py-unit max-w-container-max mx-auto h-16">
+<div class="font-headline-md text-headline-md font-bold text-primary dark:text-inverse-primary tracking-tight">
+                PolicyLens
+            </div>
+<nav class="hidden md:flex space-x-8 items-center h-full">
+<a class="font-label-md text-label-md text-primary dark:text-inverse-primary border-b-2 border-primary h-full flex items-center px-2" href="#">Analysis</a>
+<a class="font-label-md text-label-md text-on-surface-variant dark:text-surface-variant hover:bg-surface-container-high dark:hover:bg-tertiary-container px-2 transition-colors duration-200" href="#">History</a>
+<a class="font-label-md text-label-md text-on-surface-variant dark:text-surface-variant hover:bg-surface-container-high dark:hover:bg-tertiary-container px-2 transition-colors duration-200" href="#">English / हिन्दी</a>
+<span class="material-symbols-outlined text-primary cursor-pointer">verified_user</span>
+</nav>
+</div>
+</header>
+<div class="flex max-w-container-max mx-auto min-h-screen">
+<!-- SideNavBar -->
+<aside class="hidden lg:flex flex-col h-screen w-64 docked left-0 bg-secondary-fixed dark:bg-tertiary-container border-r border-primary dark:border-outline p-4 space-y-4 shadow-[2px_2px_0px_0px_rgba(2,36,72,1)] sticky top-0">
+<div class="py-4">
+<div class="font-headline-md text-headline-md text-primary font-bold">PolicyLens AI</div>
+<div class="font-label-md text-label-md text-on-secondary-fixed-variant opacity-75">Health Insurance Expert</div>
+</div>
+<div class="flex-grow space-y-2">
+<a class="flex items-center space-y-0 space-x-3 p-3 bg-primary text-on-primary rounded-lg font-bold scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">summarize</span>
+<span class="font-label-md text-label-md">Summary</span>
+</a>
+<a class="flex items-center space-x-3 p-3 text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-surface-variant hover:translate-x-1 transition-transform rounded-lg" href="#">
+<span class="material-symbols-outlined">flag</span>
+<span class="font-label-md text-label-md">Flags</span>
+</a>
+<a class="flex items-center space-x-3 p-3 text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-surface-variant hover:translate-x-1 transition-transform rounded-lg" href="#">
+<span class="material-symbols-outlined">psychology_alt</span>
+<span class="font-label-md text-label-md">Scenarios</span>
+</a>
+<a class="flex items-center space-x-3 p-3 text-on-secondary-fixed-variant dark:text-on-tertiary-fixed-variant hover:bg-surface-variant hover:translate-x-1 transition-transform rounded-lg" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-md text-label-md">Claims</span>
+</a>
+</div>
+<button class="w-full bg-primary text-on-primary py-3 rounded-lg font-bold flex items-center justify-center space-x-2 shadow-[2px_2px_0px_0px_rgba(2,36,72,1)] active:translate-y-0.5 active:shadow-none transition-all">
+<span class="material-symbols-outlined">add</span>
+<span>New Analysis</span>
+</button>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-grow p-8 bg-background">
+<!-- Dashboard Results Row -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter mb-12">
+<!-- LEFT: Health Score -->
+<section class="lg:col-span-3">
+<div class="bg-kraft p-6 rounded-lg border border-primary shadow-[4px_4px_0px_0px_rgba(2,36,72,1)] sticky top-24">
+<h2 class="font-label-md text-label-md uppercase mb-4 text-primary">Policy Health Score</h2>
+<div class="flex flex-col items-center">
+<div class="relative w-32 h-32 flex items-center justify-center mb-4">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-white/30" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" stroke-width="8"></circle>
+<circle class="text-primary" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" stroke-dasharray="364" stroke-dashoffset="120" stroke-width="12"></circle>
+</svg>
+<span class="absolute font-display-lg text-display-lg text-primary">68</span>
+</div>
+<div class="text-center">
+<span class="bg-amber-600 text-white font-bold px-3 py-1 rounded text-sm mb-2 inline-block">Moderate Risk</span>
+<p class="font-body-md text-body-md text-on-secondary-fixed-variant mt-2 underline cursor-pointer">see how this is calculated</p>
+</div>
+</div>
+<div class="mt-8 pt-6 border-t border-primary/20 space-y-4">
+<div class="flex items-center space-x-3">
+<div class="bg-primary/10 p-2 rounded">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-primary">Settlement Ratio</p>
+<p class="font-figure-mono text-figure-mono text-primary">98.4% (IRDAI)</p>
+</div>
+</div>
+<div class="bg-white/50 border border-primary/10 p-3 rounded-lg text-xs leading-relaxed text-on-secondary-fixed-variant italic">
+                                "Official data suggests high trust in claims processing but notable hidden exclusion clauses in Section 4.2."
+                            </div>
+</div>
+</div>
+</section>
+<!-- CENTER: Flag Cards -->
+<section class="lg:col-span-6">
+<div class="space-y-4">
+<div class="flex justify-between items-end mb-2">
+<h2 class="font-headline-md text-headline-md text-primary">Policy Flags</h2>
+<span class="font-label-md text-label-md text-on-surface-variant">4 Active Observations</span>
+</div>
+<!-- Card 1 -->
+<div class="bg-paper p-6 rounded-lg border border-primary relative overflow-hidden group">
+<div class="absolute top-4 right-4 text-error font-bold stamp-effect uppercase text-xs z-10">R02 · VERIFIED</div>
+<div class="flex items-start space-x-4">
+<div class="h-4 w-4 rounded-full bg-error mt-1 flex-shrink-0"></div>
+<div class="flex-grow">
+<h3 class="font-label-md text-label-md text-error uppercase mb-1">Critical Restriction</h3>
+<p class="font-body-lg text-body-lg text-primary mb-3">Room rent is capped at 1% of Sum Insured per day.</p>
+<div class="flex items-baseline justify-between border-b border-primary/10 pb-1">
+<span class="font-body-md text-body-md text-on-surface-variant flex items-center dot-leader">Potential Rupee-at-Risk</span>
+<span class="font-figure-mono text-figure-mono text-error">₹4,000/day</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-paper p-6 rounded-lg border border-primary relative overflow-hidden group">
+<div class="absolute top-4 right-4 text-amber-600 font-bold stamp-effect uppercase text-xs z-10">A14 · PENDING</div>
+<div class="flex items-start space-x-4">
+<div class="h-4 w-4 rounded-full bg-amber-600 mt-1 flex-shrink-0"></div>
+<div class="flex-grow">
+<h3 class="font-label-md text-label-md text-amber-600 uppercase mb-1">Standard Exclusion</h3>
+<p class="font-body-lg text-body-lg text-primary mb-3">Modern treatments like Robotic Surgery have a 25% co-pay.</p>
+<div class="flex items-baseline justify-between border-b border-primary/10 pb-1">
+<span class="font-body-md text-body-md text-on-surface-variant flex items-center dot-leader">Estimated Exposure</span>
+<span class="font-figure-mono text-figure-mono text-primary">₹2,50,000</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-paper p-6 rounded-lg border border-primary relative overflow-hidden group">
+<div class="absolute top-4 right-4 text-primary font-bold stamp-effect uppercase text-xs z-10">I-01 · INFO</div>
+<div class="flex items-start space-x-4">
+<div class="h-4 w-4 rounded-full bg-primary mt-1 flex-shrink-0"></div>
+<div class="flex-grow">
+<h3 class="font-label-md text-label-md text-primary uppercase mb-1">Waiting Period</h3>
+<p class="font-body-lg text-body-lg text-primary mb-3">Pre-existing Diabetes covered only after 36 months.</p>
+<div class="flex items-baseline justify-between border-b border-primary/10 pb-1">
+<span class="font-body-md text-body-md text-on-surface-variant flex items-center dot-leader">Coverage Start Date</span>
+<span class="font-figure-mono text-figure-mono text-primary">Oct 12, 2027</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- RIGHT: Chat Panel -->
+<section class="lg:col-span-3">
+<div class="bg-surface-container-high h-full rounded-lg border border-outline flex flex-col shadow-inner min-h-[500px]">
+<div class="p-4 border-b border-outline-variant bg-primary text-on-primary rounded-t-lg">
+<div class="font-label-md text-label-md">PolicyLens Assistant</div>
+<div class="text-xs opacity-80">Ask about your policy / अपनी पॉलिसी के बारे में पूछें</div>
+</div>
+<div class="flex-grow p-4 space-y-4 overflow-y-auto ledger-line">
+<div class="bg-white p-3 rounded-lg border border-outline-variant text-sm shadow-sm max-w-[85%]">
+                                Hello! I've scanned your "Elite Health Bond". What specific coverage details can I clarify for you?
+                            </div>
+<div class="bg-primary/10 p-3 rounded-lg border border-primary/20 text-sm shadow-sm max-w-[85%] self-end ml-auto">
+                                What if I am hospitalized for a knee replacement?
+                            </div>
+</div>
+<div class="p-4 bg-white border-t border-outline-variant">
+<div class="relative">
+<input class="w-full bg-surface border border-outline rounded-lg py-2 px-4 pr-12 focus:ring-1 focus:ring-primary focus:border-primary outline-none text-sm" placeholder="Type your question..." type="text"/>
+<button class="absolute right-2 top-1.5 text-primary">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- SCENARIO SIMULATOR -->
+<section class="mt-16 bg-kraft p-8 rounded-xl border-2 border-primary shadow-[8px_8px_0px_0px_rgba(2,36,72,1)]">
+<div class="mb-8">
+<h2 class="font-headline-lg text-headline-lg text-primary">Scenario Simulator</h2>
+<p class="font-body-md text-body-md text-on-secondary-fixed-variant">See how your policy responds to different medical events.</p>
+</div>
+<!-- Scenario Buttons -->
+<div class="flex flex-wrap gap-4 mb-8">
+<button class="bg-primary text-on-primary px-6 py-4 rounded-lg flex items-center space-x-3 shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:translate-y-[-2px] transition-all border border-primary">
+<span class="material-symbols-outlined">emergency</span>
+<span class="font-label-md text-label-md">Emergency Heart Procedure</span>
+</button>
+<button class="bg-white text-primary px-6 py-4 rounded-lg flex items-center space-x-3 border border-primary shadow-[4px_4px_0px_0px_rgba(2,36,72,1)] hover:translate-y-[-2px] transition-all">
+<span class="material-symbols-outlined">cloud_upload</span>
+<span class="font-label-md text-label-md">Elective Cataract Surgery</span>
+</button>
+<button class="bg-white text-primary px-6 py-4 rounded-lg flex items-center space-x-3 border border-primary shadow-[4px_4px_0px_0px_rgba(2,36,72,1)] hover:translate-y-[-2px] transition-all">
+<span class="material-symbols-outlined">child_care</span>
+<span class="font-label-md text-label-md">Maternity (Normal Delivery)</span>
+</button>
+<button class="bg-white text-primary px-6 py-4 rounded-lg flex items-center space-x-3 border border-primary shadow-[4px_4px_0px_0px_rgba(2,36,72,1)] hover:translate-y-[-2px] transition-all">
+<span class="material-symbols-outlined">biotech</span>
+<span class="font-label-md text-label-md">Diagnostic Day Care</span>
+</button>
+</div>
+<!-- Scenario Narrative Card -->
+<div class="bg-paper border border-primary p-8 rounded-lg relative">
+<div class="absolute top-6 right-8 opacity-10">
+<span class="material-symbols-outlined text-[120px]">medical_services</span>
+</div>
+<div class="max-w-3xl">
+<div class="flex items-center space-x-3 mb-4">
+<span class="bg-error text-white font-bold px-2 py-1 text-xs rounded">IMPACT ALERT</span>
+<span class="text-on-surface-variant font-label-md text-label-md">Scenario ID: S-402</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-primary mb-4">Emergency Heart Procedure Analysis</h3>
+<p class="font-body-lg text-body-lg text-on-surface-variant leading-relaxed mb-8">
+                            In the event of an emergency hospitalization for cardiac care at a Network Hospital, your policy would be subjected to a <strong>₹30,000</strong> mandatory deductible because you have opted for the "Silver Tier" loading. Furthermore, coronary stents are capped at IRDAI-approved CGHS rates, which may lead to out-of-pocket expenses if premium stents are selected.
+                        </p>
+<!-- Breakdown Table -->
+<div class="bg-white border border-outline-variant rounded p-6 shadow-sm">
+<h4 class="font-label-md text-label-md text-primary uppercase mb-4 tracking-widest">Payment Breakdown</h4>
+<div class="space-y-3">
+<div class="flex items-baseline justify-between">
+<span class="font-body-md text-body-md text-on-surface flex items-center dot-leader">Total Estimated Bill (Angioplasty)</span>
+<span class="font-figure-mono text-figure-mono text-primary">₹5,50,000</span>
+</div>
+<div class="flex items-baseline justify-between">
+<span class="font-body-md text-body-md text-on-surface flex items-center dot-leader">Policy Coverage (Sum Insured)</span>
+<span class="font-figure-mono text-figure-mono text-primary">₹5,00,000</span>
+</div>
+<div class="flex items-baseline justify-between text-error font-bold">
+<span class="font-body-md text-body-md flex items-center dot-leader">Estimated Out-of-Pocket Payment</span>
+<span class="font-figure-mono text-figure-mono">₹80,000</span>
+</div>
+</div>
+</div>
+<div class="mt-8 flex items-center space-x-6">
+<div class="flex items-center space-x-2">
+<div class="h-3 w-3 rounded-full bg-error"></div>
+<span class="text-xs font-label-md text-on-surface-variant uppercase">Exclusion Applied</span>
+</div>
+<div class="flex items-center space-x-2">
+<div class="h-3 w-3 rounded-full bg-amber-600"></div>
+<span class="text-xs font-label-md text-on-surface-variant uppercase">Sub-limit Hit</span>
+</div>
+<div class="flex items-center space-x-2">
+<div class="h-3 w-3 rounded-full bg-primary"></div>
+<span class="text-xs font-label-md text-on-surface-variant uppercase">Fully Covered</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- Footer -->
+<footer class="bg-surface-container-low dark:bg-surface-container-lowest border-t border-primary dark:border-outline-variant full-width mt-12">
+<div class="w-full py-8 px-margin-desktop flex flex-col md:flex-row justify-between items-center max-w-container-max mx-auto">
+<div class="mb-4 md:mb-0">
+<span class="font-label-md text-label-md text-primary font-bold">PolicyLens AI</span>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">© 2024 PolicyLens AI. IRDAI & NPCI Certified.</p>
+</div>
+<div class="flex space-x-6">
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary dark:hover:text-inverse-primary transition-colors opacity-80 hover:opacity-100" href="#">Privacy Policy</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary dark:hover:text-inverse-primary transition-colors opacity-80 hover:opacity-100" href="#">Terms of Service</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary dark:hover:text-inverse-primary transition-colors opacity-80 hover:opacity-100" href="#">Security Audit</a>
+</div>
+</div>
+</footer>
+<!-- Verification FAB -->
+<button class="fixed bottom-8 right-8 bg-primary text-on-primary w-14 h-14 rounded-full shadow-[4px_4px_0px_0px_rgba(2,36,72,0.3)] flex items-center justify-center hover:scale-110 active:scale-95 transition-transform z-40 group">
+<span class="material-symbols-outlined text-3xl">chat_bubble</span>
+<span class="absolute right-full mr-4 bg-primary text-white text-xs px-3 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Talk to Expert</span>
+</button>
+<script>
+        // Simple micro-interaction for Scenario buttons
+        const scenarioBtns = document.querySelectorAll('.Scenario-btn');
+        scenarioBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                scenarioBtns.forEach(b => {
+                    b.classList.remove('bg-primary', 'text-on-primary');
+                    b.classList.add('bg-white', 'text-primary');
+                });
+                btn.classList.remove('bg-white', 'text-primary');
+                btn.classList.add('bg-primary', 'text-on-primary');
+            });
+        });
+    </script>
+</body></html>

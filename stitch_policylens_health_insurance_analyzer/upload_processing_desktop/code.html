@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PolicyLens AI | Secure Policy Analysis</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&amp;family=Noto+Serif:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        
+        /* Shimmer Effect for Processing State */
+        .shimmer {
+            background: linear-gradient(90deg, #FAF6EC 25%, #f1efe4 50%, #FAF6EC 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite linear;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        /* Ink-bleed stamp effect */
+        .ink-stamp {
+            opacity: 0.92;
+            filter: contrast(1.2) sepia(0.2);
+            mix-blend-mode: multiply;
+        }
+
+        /* Dot-leaders for ledger look */
+        .dot-leader::after {
+            content: " .................................................................................................................................................................";
+            white-space: nowrap;
+            overflow: hidden;
+            display: inline-block;
+            flex-grow: 1;
+            color: #74777f;
+            opacity: 0.3;
+            margin: 0 8px;
+        }
+
+        /* Transition for view switching */
+        .view-transition {
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-out;
+        }
+        .hidden-view {
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "inverse-on-surface": "#f1f0f4",
+                      "on-secondary-fixed-variant": "#4e462c",
+                      "secondary-fixed-dim": "#d2c6a3",
+                      "surface": "#faf9fc",
+                      "primary": "#022448",
+                      "secondary": "#665e41",
+                      "on-tertiary": "#ffffff",
+                      "surface-container-lowest": "#ffffff",
+                      "primary-fixed-dim": "#adc8f5",
+                      "tertiary": "#122439",
+                      "on-error-container": "#93000a",
+                      "on-secondary-container": "#6d6447",
+                      "secondary-container": "#eee2bd",
+                      "surface-dim": "#dad9dd",
+                      "on-primary-container": "#8aa4cf",
+                      "on-primary": "#ffffff",
+                      "inverse-primary": "#adc8f5",
+                      "tertiary-fixed": "#d2e4ff",
+                      "surface-container": "#eeedf1",
+                      "inverse-surface": "#2f3033",
+                      "on-secondary-fixed": "#211b05",
+                      "on-tertiary-fixed": "#091c31",
+                      "on-surface": "#1a1c1e",
+                      "background": "#faf9fc",
+                      "on-tertiary-container": "#92a4be",
+                      "outline-variant": "#c4c6cf",
+                      "surface-container-high": "#e9e7eb",
+                      "on-primary-fixed-variant": "#2d486d",
+                      "error": "#ba1a1a",
+                      "primary-container": "#1e3a5f",
+                      "on-background": "#1a1c1e",
+                      "surface-container-low": "#f4f3f7",
+                      "secondary-fixed": "#eee2bd",
+                      "on-primary-fixed": "#001c3b",
+                      "on-error": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "surface-tint": "#455f87",
+                      "primary-fixed": "#d5e3ff",
+                      "on-tertiary-fixed-variant": "#37485e",
+                      "tertiary-container": "#293a50",
+                      "on-secondary": "#ffffff",
+                      "outline": "#74777f",
+                      "surface-variant": "#e3e2e6",
+                      "surface-container-highest": "#e3e2e6",
+                      "on-surface-variant": "#43474e",
+                      "tertiary-fixed-dim": "#b6c8e3",
+                      "surface-bright": "#faf9fc",
+                      "kraft": "#E4D8B4",
+                      "paper": "#FAF6EC"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "container-max": "1200px",
+                      "margin-desktop": "48px",
+                      "margin-mobile": "16px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "body-md": ["Noto Sans"],
+                      "figure-mono": ["Noto Sans"],
+                      "label-md": ["Noto Sans"],
+                      "display-lg": ["Noto Serif"],
+                      "headline-md": ["Noto Serif"],
+                      "body-lg": ["Noto Sans"],
+                      "headline-lg": ["Noto Serif"]
+              },
+              "fontSize": {
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "figure-mono": ["16px", {"lineHeight": "24px", "fontWeight": "700"}],
+                      "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "700"}]
+              }
+            },
+          },
+        }
+      </script>
+</head>
+<body class="bg-paper text-on-surface font-body-md antialiased overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-inverse-surface border-b border-primary dark:border-outline-variant docked full-width top-0 z-50">
+<div class="flex justify-between items-center w-full px-margin-desktop py-unit max-w-container-max mx-auto h-16">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-inverse-primary tracking-tight">PolicyLens</span>
+</div>
+<div class="flex items-center gap-6">
+<!-- Language Toggle Segmented Control -->
+<div class="bg-surface-variant p-1 rounded-lg flex items-center">
+<button class="px-4 py-1.5 font-label-md text-label-md rounded-lg bg-primary text-on-primary shadow-sm transition-all">English</button>
+<button class="px-4 py-1.5 font-label-md text-label-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all">हिंदी</button>
+</div>
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-xl" data-icon="verified_user">verified_user</span>
+<span class="font-label-md text-label-md">Secure Portal</span>
+</div>
+</div>
+</div>
+</header>
+<main class="min-h-[calc(100vh-64px-80px)] flex items-center justify-center relative px-margin-desktop py-12">
+<!-- Background Aesthetic Elements -->
+<div class="absolute inset-0 pointer-events-none opacity-5">
+<div class="grid grid-cols-12 h-full w-full max-w-container-max mx-auto px-margin-desktop gap-gutter">
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+<div class="border-r border-primary h-full"></div>
+</div>
+</div>
+<!-- UPLOAD VIEW -->
+<section class="view-transition w-full max-w-2xl relative z-10" id="upload-view">
+<div class="text-center mb-10">
+<h1 class="font-headline-lg text-headline-lg text-primary mb-2">Policy Clarity in Seconds.</h1>
+<p class="text-on-surface-variant font-body-lg text-body-lg">Upload your health insurance policy to reveal hidden flags and scenarios.</p>
+</div>
+<!-- Central Kraft Card Dropzone -->
+<div class="group cursor-pointer relative" onclick="startProcessing()">
+<!-- 2px Offset "Shadow" Box -->
+<div class="absolute inset-0 bg-primary translate-x-1.5 translate-y-1.5 rounded-lg"></div>
+<!-- Main Card -->
+<div class="relative bg-kraft border border-primary p-12 rounded-lg flex flex-col items-center justify-center text-center space-y-6 transition-transform hover:-translate-y-1 active:translate-y-0.5">
+<div class="w-20 h-20 bg-paper rounded-lg border border-primary flex items-center justify-center mb-2 shadow-sm">
+<span class="material-symbols-outlined text-4xl text-primary" data-icon="upload_file">upload_file</span>
+</div>
+<div class="space-y-2">
+<h2 class="font-headline-md text-headline-md text-primary">Drop your policy PDF</h2>
+<p class="font-body-md text-body-md text-on-secondary-fixed-variant opacity-80">or upload from your phone</p>
+</div>
+<div class="pt-4">
+<button class="bg-primary text-on-primary px-8 py-3 rounded-lg font-label-md text-label-md flex items-center gap-2 hover:bg-primary-container transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+                            SELECT DOCUMENT
+                        </button>
+</div>
+</div>
+</div>
+<div class="mt-12 flex flex-col items-center space-y-6">
+<!-- Trust Badge -->
+<div class="flex items-center gap-8 border-y border-outline-variant py-4 px-8 w-full justify-center opacity-70 grayscale">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-2xl" data-icon="policy">policy</span>
+<span class="font-label-md text-label-md uppercase tracking-widest text-on-surface-variant">IRDAI REGULATED</span>
+</div>
+<div class="h-4 w-px bg-outline-variant"></div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-2xl" data-icon="encrypted">encrypted</span>
+<span class="font-label-md text-label-md uppercase tracking-widest text-on-surface-variant">ISO 27001 SECURE</span>
+</div>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm" data-icon="info">info</span>
+<p class="font-body-md text-body-md text-sm italic">"We never store your document without your permission"</p>
+</div>
+</div>
+</section>
+<!-- PROCESSING VIEW -->
+<section class="view-transition hidden-view w-full max-w-container-max mx-auto" id="processing-view">
+<div class="flex gap-gutter">
+<!-- Skeleton SideNav -->
+<aside class="w-64 h-[600px] bg-secondary-fixed opacity-50 rounded-lg flex flex-col p-4 space-y-6 shimmer">
+<div class="h-8 w-3/4 bg-on-secondary-fixed-variant/10 rounded"></div>
+<div class="space-y-4 pt-10">
+<div class="h-10 w-full bg-on-secondary-fixed-variant/5 rounded"></div>
+<div class="h-10 w-full bg-on-secondary-fixed-variant/5 rounded"></div>
+<div class="h-10 w-full bg-on-secondary-fixed-variant/5 rounded"></div>
+<div class="h-10 w-full bg-on-secondary-fixed-variant/5 rounded"></div>
+</div>
+</aside>
+<!-- Skeleton Canvas -->
+<div class="flex-1 flex flex-col gap-gutter">
+<!-- Top Summary Card -->
+<div class="h-32 w-full bg-kraft border border-primary/20 rounded-lg flex items-center justify-between px-8 shimmer">
+<div class="space-y-2">
+<div class="h-4 w-32 bg-primary/10 rounded"></div>
+<div class="h-8 w-64 bg-primary/10 rounded"></div>
+</div>
+<div class="flex gap-4">
+<div class="w-16 h-16 rounded-full bg-primary/5 border border-primary/10"></div>
+</div>
+</div>
+<!-- Main Analysis Bento -->
+<div class="grid grid-cols-3 gap-gutter h-[450px]">
+<div class="col-span-2 bg-paper border border-primary/20 rounded-lg p-6 shimmer">
+<div class="h-6 w-1/4 bg-primary/10 rounded mb-6"></div>
+<div class="space-y-4">
+<div class="h-px w-full bg-outline-variant/30"></div>
+<div class="flex justify-between items-center py-2">
+<div class="h-4 w-1/3 bg-primary/5 rounded"></div>
+<div class="h-4 w-1/4 bg-primary/5 rounded"></div>
+</div>
+<div class="h-px w-full bg-outline-variant/30"></div>
+<div class="flex justify-between items-center py-2">
+<div class="h-4 w-1/2 bg-primary/5 rounded"></div>
+<div class="h-4 w-1/6 bg-primary/5 rounded"></div>
+</div>
+<div class="h-px w-full bg-outline-variant/30"></div>
+<div class="flex justify-between items-center py-2">
+<div class="h-4 w-1/4 bg-primary/5 rounded"></div>
+<div class="h-4 w-1/2 bg-primary/5 rounded"></div>
+</div>
+</div>
+</div>
+<div class="col-span-1 bg-kraft/40 border border-primary/20 rounded-lg p-6 shimmer">
+<div class="h-6 w-1/2 bg-primary/10 rounded mb-6"></div>
+<div class="space-y-4">
+<div class="h-24 w-full bg-paper/50 rounded-lg border border-primary/10"></div>
+<div class="h-24 w-full bg-paper/50 rounded-lg border border-primary/10"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Floating Overlay Status -->
+<div class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50">
+<div class="bg-primary text-on-primary px-12 py-6 rounded-xl border-4 border-kraft shadow-xl flex flex-col items-center gap-3">
+<div class="flex items-center gap-4">
+<svg class="animate-spin h-6 w-6 text-kraft" fill="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+<path class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
+</svg>
+<span class="font-headline-md text-headline-md tracking-wide" id="processing-label">Reading your document…</span>
+</div>
+<div class="font-body-md text-body-md opacity-70" id="processing-sublabel">दस्तावेज़ पढ़ रहे हैं…</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-low dark:bg-surface-container-lowest border-t border-primary dark:border-outline-variant full-width relative z-40">
+<div class="w-full py-8 px-margin-desktop flex flex-col md:flex-row justify-between items-center max-w-container-max mx-auto">
+<div class="flex flex-col items-center md:items-start gap-2">
+<span class="font-label-md text-label-md text-primary font-bold">PolicyLens AI</span>
+<p class="font-body-md text-body-md text-on-surface-variant text-sm">© 2024 PolicyLens AI. IRDAI &amp; NPCI Certified.</p>
+</div>
+<div class="flex gap-8 mt-6 md:mt-0">
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Security Audit</a>
+</div>
+</div>
+</footer>
+<!-- Verification Stamp (Floating/Contextual) -->
+<div class="fixed bottom-8 right-8 ink-stamp pointer-events-none transform rotate-12 z-[60]">
+<div class="border-4 border-primary rounded-full p-2 flex items-center justify-center w-24 h-24 text-center">
+<div class="border border-primary rounded-full w-full h-full flex flex-col items-center justify-center p-1">
+<span class="font-label-md text-[8px] leading-tight uppercase font-bold text-primary">Certified</span>
+<span class="material-symbols-outlined text-primary text-xl" data-icon="check_circle">check_circle</span>
+<span class="font-label-md text-[8px] leading-tight uppercase font-bold text-primary">Compliance</span>
+</div>
+</div>
+</div>
+<script>
+        function startProcessing() {
+            const uploadView = document.getElementById('upload-view');
+            const processingView = document.getElementById('processing-view');
+            
+            // Transition out upload view
+            uploadView.style.opacity = '0';
+            uploadView.style.transform = 'translateY(-20px)';
+            
+            setTimeout(() => {
+                uploadView.classList.add('hidden-view');
+                processingView.classList.remove('hidden-view');
+                processingView.style.display = 'block';
+                
+                // Allow layout to calculate then fade in
+                setTimeout(() => {
+                    processingView.style.opacity = '1';
+                    processingView.style.transform = 'translateY(0)';
+                    runProcessingLabels();
+                }, 50);
+            }, 500);
+        }
+
+        function runProcessingLabels() {
+            const label = document.getElementById('processing-label');
+            const sublabel = document.getElementById('processing-sublabel');
+            
+            const steps = [
+                { en: "Reading your document…", hi: "दस्तावेज़ पढ़ रहे हैं…" },
+                { en: "Matching clauses…", hi: "नियमों का मिलान कर रहे हैं…" },
+                { en: "Calculating your risk…", hi: "जोखिम की गणना हो रही है…" }
+            ];
+            
+            let current = 0;
+            const interval = setInterval(() => {
+                current++;
+                if (current < steps.length) {
+                    label.textContent = steps[current].en;
+                    sublabel.textContent = steps[current].hi;
+                } else {
+                    clearInterval(interval);
+                    // In a real app, we would transition to results here
+                }
+            }, 2500);
+        }
+    </script>
+</body></html>
