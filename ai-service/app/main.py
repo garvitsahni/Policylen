@@ -19,15 +19,16 @@ app.add_middleware(
 )
 
 TAXONOMY_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'taxonomy.json')
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-flash-1.5")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_CHAT_MODEL = os.getenv("GROQ_CHAT_MODEL", "llama-3.1-8b-instant")
 
 def load_taxonomy():
     with open(TAXONOMY_PATH, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def call_openrouter(system_prompt: str, user_prompt: str) -> dict:
-    if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == "your-openrouter-api-key-here":
+def call_groq(system_prompt: str, user_prompt: str, model: str = None, max_tokens: int = 1024, temperature: float = 0.1, response_json: bool = False) -> dict:
+    if not GROQ_API_KEY or GROQ_API_KEY == "your-groq-api-key-here":
         return {
             "answer": None,
             "grounded": False,
@@ -35,22 +36,27 @@ def call_openrouter(system_prompt: str, user_prompt: str) -> dict:
             "raw_error": "API key not configured"
         }
 
+    payload = {
+        "model": model or GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+
+    if response_json:
+        payload["response_format"] = {"type": "json_object"}
+
     response = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
+        url="https://api.groq.com/openai/v1/chat/completions",
         headers={
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json"
         },
-        json={
-            "model": OPENROUTER_MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 0.1,
-            "max_tokens": 1024,
-        },
-        timeout=30
+        json=payload,
+        timeout=60
     )
 
     if response.status_code != 200:
@@ -58,7 +64,7 @@ def call_openrouter(system_prompt: str, user_prompt: str) -> dict:
             "answer": None,
             "grounded": False,
             "cited_clause_id": None,
-            "raw_error": f"OpenRouter error {response.status_code}: {response.text[:200]}"
+            "raw_error": f"Groq error {response.status_code}: {response.text[:200]}"
         }
 
     data = response.json()
@@ -226,22 +232,27 @@ async def chat(body: dict):
             f"Answer only from the excerpts above. If the answer is not there, say so."
         )
 
-        or_result = call_openrouter(system_prompt, user_prompt)
+        groq_result = call_groq(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=GROQ_CHAT_MODEL,
+            max_tokens=1024,
+        )
         db.store_chat_message(document_id, "user", question, grounded_in_document=False)
 
-        if or_result.get("raw_error"):
+        if groq_result.get("raw_error"):
             fallback = "I'm sorry, I couldn't process this question right now."
-            if "API key not configured" in or_result["raw_error"]:
+            if "API key not configured" in groq_result["raw_error"]:
                 fallback = "Chat is not configured yet. Please set up your API key to use this feature."
             db.store_chat_message(document_id, "assistant", fallback, grounded_in_document=False)
             return {
                 "answer": fallback,
                 "groundedInDocument": False,
                 "citedClauseId": None,
-                "error": or_result["raw_error"]
+                "error": groq_result["raw_error"]
             }
 
-        answer = or_result["answer"]
+        answer = groq_result["answer"]
 
         # Determine grounding based on whether the answer contains the fallback phrase
         grounded = True
@@ -377,40 +388,24 @@ async def extract_clauses(body: dict):
     if not text:
         raise HTTPException(status_code=400, detail="extractedText is required")
 
-    if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == "your-openrouter-api-key-here":
+    if not GROQ_API_KEY or GROQ_API_KEY == "your-groq-api-key-here":
         raise HTTPException(status_code=500, detail="API key not configured")
 
     try:
         truncated = text[:30000] if len(text) > 30000 else text
         user_prompt = f"Policy document text:\n\n{truncated}"
 
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": OPENROUTER_MODEL,
-                "messages": [
-                    {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": 0.1,
-                "max_tokens": 4096,
-                "response_format": {"type": "json_object"},
-            },
-            timeout=60
+        groq_result = call_groq(
+            system_prompt=EXTRACTION_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            max_tokens=4096,
+            response_json=True,
         )
 
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail=f"AI extraction failed: {response.status_code} {response.text[:300]}"
-            )
+        if groq_result.get("raw_error"):
+            raise HTTPException(status_code=502, detail=f"AI extraction failed: {groq_result['raw_error']}")
 
-        data = response.json()
-        raw = data["choices"][0]["message"]["content"].strip()
+        raw = groq_result["answer"]
 
         # Clean markdown code fence if present
         if raw.startswith("```"):

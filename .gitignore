@@ -11,4 +11,5 @@ ai-service/app/__pycache__/
 .DS_Store
 Thumbs.db
 *.log
+*.err
 backend/src/flag-engine/*.js
