@@ -7,6 +7,7 @@ import { ScoreCard } from './components/ScoreCard.jsx'
 import { FlagCardList } from './components/FlagCard.jsx'
 import { ChatPanel } from './components/ChatPanel.jsx'
 import { ScenarioSimulator } from './components/ScenarioSimulator.jsx'
+import { ClaimsView } from './components/ClaimsView.jsx'
 import { useIsMobile } from './lib/useMediaQuery.js'
 
 function AppInner() {
@@ -14,6 +15,15 @@ function AppInner() {
   const [documentId, setDocumentId] = useState(null)
   const [flags, setFlags] = useState([])
   const [score, setScore] = useState(null)
+  const [error, setError] = useState(null)
+  const [activeNav, setActiveNav] = useState('flags')
+
+
+  const handleNavigate = (nav) => {
+    if (['summary', 'flags', 'scenarios', 'claims'].includes(nav)) {
+      setActiveNav(nav)
+    }
+  }
   const _isMobile = useIsMobile()
 
   const handleFileSelected = useCallback(async (file) => {
@@ -51,7 +61,8 @@ function AppInner() {
       console.error('Analysis failed:', err)
       setFlags([])
       setScore(null)
-      setView('results')
+      setError(err.message || 'Analysis failed')
+      setView('error')
     }
   }, [])
 
@@ -59,6 +70,7 @@ function AppInner() {
     setDocumentId(null)
     setFlags([])
     setScore(null)
+    setError(null)
     setView('upload')
   }
 
@@ -81,6 +93,23 @@ function AppInner() {
     <div className="min-h-screen bg-paper">
       {view === 'upload' && headerContent()}
       {view === 'upload' && <UploadZone onFileSelected={handleFileSelected} />}
+      {view === 'error' && (
+        <div className="min-h-[calc(100vh-64px-80px)] flex items-center justify-center px-margin-desktop py-12">
+          <section className="w-full max-w-lg bg-kraft border border-primary rounded-lg p-10 text-center">
+            <span className="material-symbols-outlined text-5xl text-error">error</span>
+            <h2 className="font-headline-lg text-headline-lg font-bold text-primary mt-4">Analysis Failed</h2>
+            <p className="text-on-surface-variant mt-3">Your document could not be analyzed. This usually happens when the AI service is temporarily rate-limited or unreachable.</p>
+            {error && <p className="font-mono text-sm text-error mt-3 break-words">{error}</p>}
+            <button
+              type="button"
+              onClick={handleNewAnalysis}
+              className="mt-8 bg-primary text-on-primary px-8 py-3 rounded-lg font-label-md text-label-md hover:bg-primary-container transition-colors"
+            >
+              Try Again
+            </button>
+          </section>
+        </div>
+      )}
       {view === 'processing' && (
         <>
           {headerContent()}
@@ -90,7 +119,7 @@ function AppInner() {
       {view === 'results' && (
         <div className="min-h-dvh flex flex-col lg:flex-row">
           <aside className="hidden lg:block w-[250px] shrink-0 sticky top-0 h-dvh self-start">
-            <SideNav active="flags" onNewAnalysis={handleNewAnalysis} />
+            <SideNav active={activeNav} onNavigate={handleNavigate} onNewAnalysis={handleNewAnalysis} />
           </aside>
           <main className="flex-1 min-w-0 flex flex-col p-6">
             <div className="flex-1 flex flex-col lg:flex-row gap-6 items-start">
@@ -105,18 +134,45 @@ function AppInner() {
                 </div>
               )}
               <div className="flex-1 min-w-0 w-full">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="font-headline-md text-headline-md font-bold text-primary">Policy Flags</h2>
-                  <span className="font-label-md text-label-md text-on-surface-variant shrink-0">{flags.length} Active Observations</span>
-                </div>
-                <FlagCardList flags={flags} />
+                {activeNav === 'flags' && (
+                  <>
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="font-headline-md text-headline-md font-bold text-primary">Policy Flags</h2>
+                      <span className="font-label-md text-label-md text-on-surface-variant shrink-0">{flags.length} Active Observations</span>
+                    </div>
+                    <FlagCardList flags={flags} />
+                  </>
+                )}
+                {activeNav === 'scenarios' && <ScenarioSimulator documentId={documentId} />}
+                {activeNav === 'claims' && <ClaimsView documentId={documentId} />}
+                {activeNav === 'summary' && (
+                  <>
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="font-headline-md text-headline-md font-bold text-primary">Policy Summary</h2>
+                    </div>
+                    <div className="bg-kraft border border-primary rounded-xl p-6 space-y-4">
+                      <p className="font-body-lg text-body-lg text-on-surface leading-relaxed">
+                        Your health insurance policy has been analyzed. {flags.length} active observations were found.
+                        The report card on the left shows the overall coverage score. Use the chat panel to ask questions
+                        about specific clauses, or run scenarios to estimate out-of-pocket costs.
+                      </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white border border-outline-variant rounded-lg p-4">
+                          <div className="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest text-xs">Red Flags</div>
+                          <div className="font-headline-md text-headline-md font-bold text-error mt-1">{flags.filter(f => f.colorType === 'red').length}</div>
+                        </div>
+                        <div className="bg-white border border-outline-variant rounded-lg p-4">
+                          <div className="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest text-xs">Green Flags</div>
+                          <div className="font-headline-md text-headline-md font-bold text-primary mt-1">{flags.filter(f => f.colorType === 'green').length}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="w-full lg:w-[320px] shrink-0 sticky lg:top-6 self-start">
                 <ChatPanel documentId={documentId} />
               </div>
-            </div>
-            <div className="mt-12">
-              <ScenarioSimulator documentId={documentId} />
             </div>
             <footer className="mt-12 bg-surface-container-low border-t border-primary">
               <div className="py-8 flex flex-col md:flex-row justify-between items-center gap-4">

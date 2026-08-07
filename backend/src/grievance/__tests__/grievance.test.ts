@@ -1,7 +1,8 @@
+import { describe, test, expect } from 'vitest';
 import { generateGrievanceDraft } from '../index.js';
 
 describe('generateGrievanceDraft', () => {
-  it('generates a draft with all fields', () => {
+  test('generates a draft with all fields', () => {
     const draft = generateGrievanceDraft({
       policyNumber: 'POL-12345',
       insurerName: 'ABC Insurance',
@@ -22,7 +23,7 @@ describe('generateGrievanceDraft', () => {
     expect(draft.body).not.toContain('undefined');
   });
 
-  it('works with minimal fields', () => {
+  test('works with minimal fields', () => {
     const draft = generateGrievanceDraft({
       claimantName: 'Priya Patel',
       reason: 'delayed beyond 30 days',
@@ -33,7 +34,7 @@ describe('generateGrievanceDraft', () => {
     expect(draft.body).toContain('[Insurer Name]');
   });
 
-  it('includes the "not auto-submitted" disclaimer', () => {
+  test('includes the "not auto-submitted" disclaimer', () => {
     const draft = generateGrievanceDraft({
       claimantName: 'Test User',
       reason: 'test reason',
@@ -42,7 +43,7 @@ describe('generateGrievanceDraft', () => {
     expect(draft.body).toContain('not a filed document');
   });
 
-  it('handles null values gracefully', () => {
+  test('handles null values gracefully', () => {
     const draft = generateGrievanceDraft({
       policyNumber: null,
       insurerName: null,

@@ -1,3 +1,4 @@
+import { describe, test, expect } from 'vitest';
 import { generateReportCard } from '../index.js';
 
 const baseFlags = [
@@ -9,7 +10,7 @@ const baseFlags = [
 ];
 
 describe('generateReportCard', () => {
-  it('returns all required fields', () => {
+  test('returns all required fields', () => {
     const card = generateReportCard({
       score: 60,
       flags: baseFlags,
@@ -26,7 +27,7 @@ describe('generateReportCard', () => {
     expect(card.topFlags.length).toBe(3);
   });
 
-  it('places red flags before green in top flags', () => {
+  test('places red flags before green in top flags', () => {
     const card = generateReportCard({
       score: 60,
       flags: baseFlags,
@@ -39,7 +40,7 @@ describe('generateReportCard', () => {
     expect(card.topFlags[2].type).toBe('green');
   });
 
-  it('adds RECOMMENDED stamp for score >= 70', () => {
+  test('adds RECOMMENDED stamp for score >= 70', () => {
     const card = generateReportCard({
       score: 75,
       flags: [],
@@ -50,7 +51,7 @@ describe('generateReportCard', () => {
     expect(card.stamps).toContain('RECOMMENDED');
   });
 
-  it('adds HIGH_RISK stamp for score < 40', () => {
+  test('adds HIGH_RISK stamp for score < 40', () => {
     const card = generateReportCard({
       score: 20,
       flags: baseFlags,
@@ -61,7 +62,7 @@ describe('generateReportCard', () => {
     expect(card.stamps).toContain('HIGH_RISK');
   });
 
-  it('adds READ_WITH_CAUTION stamp for scores 40-69', () => {
+  test('adds READ_WITH_CAUTION stamp for scores 40-69', () => {
     const card = generateReportCard({
       score: 55,
       flags: baseFlags,
@@ -72,7 +73,7 @@ describe('generateReportCard', () => {
     expect(card.stamps).toContain('READ_WITH_CAUTION');
   });
 
-  it('adds CONSUMER_FRIENDLY stamp for 3+ green flags', () => {
+  test('adds CONSUMER_FRIENDLY stamp for 3+ green flags', () => {
     const card = generateReportCard({
       score: 60,
       flags: baseFlags,
@@ -83,7 +84,7 @@ describe('generateReportCard', () => {
     expect(card.stamps).toContain('CONSUMER_FRIENDLY');
   });
 
-  it('adds HAS_RESTORATION stamp when R13 is present', () => {
+  test('adds HAS_RESTORATION stamp when R13 is present', () => {
     const flags = [...baseFlags, { ruleId: 'R13', type: 'green' as const, severity: 'low', clauseType: 'restoration', explanation: 'Restoration', excerpt: 'Restoration' }];
     const card = generateReportCard({
       score: 60,
@@ -95,7 +96,7 @@ describe('generateReportCard', () => {
     expect(card.stamps).toContain('HAS_RESTORATION');
   });
 
-  it('adds STRONG_SETTLEMENT_RATIO stamp when ratio >= 80', () => {
+  test('adds STRONG_SETTLEMENT_RATIO stamp when ratio >= 80', () => {
     const card = generateReportCard({
       score: 60,
       flags: [],
@@ -106,7 +107,7 @@ describe('generateReportCard', () => {
     expect(card.stamps).toContain('STRONG_SETTLEMENT_RATIO');
   });
 
-  it('adds LOW_SETTLEMENT_RATIO stamp when ratio < 50', () => {
+  test('adds LOW_SETTLEMENT_RATIO stamp when ratio < 50', () => {
     const card = generateReportCard({
       score: 60,
       flags: [],
@@ -117,7 +118,7 @@ describe('generateReportCard', () => {
     expect(card.stamps).toContain('LOW_SETTLEMENT_RATIO');
   });
 
-  it('truncates long explanations in topFlags', () => {
+  test('truncates long explanations in topFlags', () => {
     const longFlags = [{
       ruleId: 'R99', type: 'red' as const, severity: 'high', clauseType: 'test',
       explanation: 'A'.repeat(200),

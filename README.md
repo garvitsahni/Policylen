@@ -67,23 +67,23 @@ Indian insurance buyers overwhelmingly purchase policies based on a salesperson'
 └──────────────┘       └────────┬───────────┘       └──────────┬───────────┘
                                 │                               │
                       ┌─────────▼──────────┐         ┌──────────▼──────────┐
-                      │  PostgreSQL          │         │  Gemini API          │
-                      │  (Prisma ORM)        │         │  (OpenRouter)        │
-                      │  + pgvector          │         └─────────────────────┘
-                      └──────────────────────┘
+                      │  PostgreSQL          │         │  LLM providers       │
+                      │  (Prisma ORM)        │         │  Gemini → NVIDIA →  │
+                      │  + pgvector          │         │  Groq (failover)    │
+                      └──────────────────────┘         └─────────────────────┘
 ```
 
-**Why this split:** The Node backend owns auth, request orchestration, and talking to Postgres. The Python/FastAPI service owns everything Gemini-facing (extraction, RAG, generation) so LLM logic stays isolated and testable independent of the web API layer. The Node backend calls the AI service over HTTP; the frontend never calls the AI service directly.
+**Why this split:** The Node backend owns auth, request orchestration, and talking to Postgres. The Python/FastAPI service owns everything LLM-facing (extraction, RAG, generation) so LLM logic stays isolated and testable independent of the web API layer. The Node backend calls the AI service over HTTP; the frontend never calls the AI service directly.
 
 ### Data Flow
 
-1. **Upload** → `POST /api/documents` → file saved → document row created (`status: uploaded`)
-2. **Extraction** → AI service extracts raw text → Gemini structured extraction (function-calling JSON schema) → Node writes `ExtractedClause` rows → `status: extracted`
-3. **Flagging (deterministic)** → Node runs extracted data through the rule-matching engine against `data/taxonomy.json` → writes `Flag` rows → `status: flagged`
-4. **Explanation** → AI service fills plain-language templates with extracted values → stored on the flag row
-5. **Scoring** → Deterministic `calculateScore()` reads all flags + settlement ratio → writes `PolicyHealthScore` row → `status: scored`
-6. **Embedding** → AI service chunks text → generates embeddings → stores in `DocumentChunk` (pgvector) → `status: ready`
-7. **Chat** → `POST /api/documents/:id/chat` → AI service retrieves top-k chunks → Gemini answers grounded in retrieved context only → response includes clause citation or explicit "not found in document" flag
+1. **Upload** → `POST /api/documents` → file saved → document row created (`status: extracting`)
+2. **Raw text extraction** → backend calls AI service `/extract` → PDF text pulled with pdfplumber (`status: analyzing`)
+3. **Structured extraction** → AI service `/extract-clauses` → Gemini (JSON schema) with NVIDIA/Groq fallback → writes `ExtractedClause` rows
+4. **Flagging (deterministic)** → Node runs extracted data through the rule-matching engine against `data/taxonomy.json` → writes `Flag` rows
+5. **Scoring** → Deterministic `computePolicyScore()` reads all flags + settlement ratio → writes `PolicyHealthScore` row
+6. **Embedding** → AI service `/embed` chunks text → stores chunks for BM25 retrieval → `status: analyzed`
+7. **Chat** → `POST /api/chat/:documentId/chat` → AI service retrieves top-k chunks → Gemini/Groq answers grounded in retrieved context only → response includes clause citation or explicit "not found in document" flag
 
 ---
 
@@ -150,7 +150,7 @@ Indian insurance buyers overwhelmingly purchase policies based on a salesperson'
 
 ### AI Service (`ai-service/`)
 - **Runtime:** Python 3.13 + FastAPI
-- **LLM:** Gemini Flash 1.5 via OpenRouter
+- **LLM providers (failover chain):** Gemini (`google-genai` SDK, JSON-schema structured output) → NVIDIA NIM (OpenAI-compatible) → Groq (chunked, TPM-bounded)
 - **PDF:** pdfplumber
 - **Server:** uvicorn
 
@@ -162,14 +162,33 @@ Indian insurance buyers overwhelmingly purchase policies based on a salesperson'
 
 ## Quick Start
 
+Running PolicyLens locally means starting **four things** that talk to each other:
+
+| # | Component | What it does | Where it runs |
+|---|-----------|--------------|---------------|
+| 1 | **Database** (PostgreSQL + pgvector) | Stores your uploaded policies, extracted clauses, flags, and scores | Docker container, port **5434** |
+| 2 | **Backend API** (Node/Express) | Handles uploads, runs the flag/scoring engine, serves the API | `http://localhost:3000` |
+| 3 | **AI Service** (Python/FastAPI) | Extracts clause data from PDFs with the LLM, powers RAG chat | `http://localhost:8001` |
+| 4 | **Frontend** (React/Vite) | The website you open in your browser | `http://localhost:5173` |
+
+The frontend calls the backend, the backend calls the AI service, and both talk to the database — so all four need to be up. The steps below set them up in order.
+
+> **Paths:** commands are shown for **Windows** and **macOS/Linux**. Everything is run from the repo root (`PolicyLens/`) unless a step says otherwise.
+
 ### Prerequisites
 
-- Node.js 20+
-- Python 3.13+
-- Docker Desktop (for PostgreSQL)
-- A Gemini API key via OpenRouter (free tier available at https://openrouter.ai)
+- **Node.js 20+** and npm
+- **Python 3.13+**
+- **Docker Desktop** (for PostgreSQL + pgvector)
+- **At least one LLM API key** (see [Step 3](#3-configure-environment)):
+  - **Groq** (free tier) — `GROQ_API_KEY` at https://console.groq.com — used as the chat provider and a chunked extraction fallback
+  - **Gemini** — `GEMINI_API_KEY` at https://aistudio.google.com/apikey — primary extraction provider (JSON-schema structured output)
+  - **NVIDIA NIM** (optional, dev-only) — `NVIDIA_API_KEY` at https://build.nvidia.com — extraction/chat fallback
+  - **OpenRouter** (optional) — `OPENROUTER_API_KEY` at https://openrouter.ai — only needed for the regional-language *translation* feature
 
-### 1. Clone & Install
+### Step 1 — Install dependencies
+
+Each sub-project has its own dependencies. Install them once:
 
 ```bash
 # Frontend
@@ -180,58 +199,132 @@ npm install
 cd ../backend
 npm install
 
-# AI Service
+# AI Service — create a Python virtual environment, then install packages
 cd ../ai-service
-python -m venv venv
-venv\Scripts\activate    # Windows
-# source venv/bin/activate  # macOS/Linux
+python -m venv venv            # creates the "venv" folder (first time only)
+venv\Scripts\activate          # Windows — activates the virtual environment
+# source venv/bin/activate     # macOS/Linux
 pip install -r requirements.txt
 ```
 
-### 2. Start PostgreSQL
+> The AI Service runs from inside this virtual environment. **Every new terminal** you open for the AI Service must re-activate it with `venv\Scripts\activate` (Windows) or `source venv/bin/activate` (macOS/Linux) before running commands.
+
+### Step 2 — Start the database
+
+The database runs in a Docker container defined by `docker-compose.yml`:
 
 ```bash
-cd ..
+# From the project root (where docker-compose.yml is)
 docker compose up -d
-# Runs pgvector/pgvector:pg16 on port 5432
 ```
 
-### 3. Configure Environment
+This downloads the `pgvector/pgvector:pg16` image and starts PostgreSQL in the **background** (that's what `-d`, *detached*, means — your terminal isn't blocked). The database is exposed on port **5434**.
 
-Edit `.env` in the project root:
+Check that it started successfully:
+
+```bash
+docker compose ps     # the "postgres" container should show a healthy status
+```
+
+### Step 3 — Configure your API keys
+
+PolicyLens reads its configuration from a `.env` file in the project root. Copy the template and fill in your keys:
+
+```bash
+# From the project root
+cp .env.example .env                  # macOS/Linux
+copy .env.example .env                # Windows
+```
+
+Then open `.env` in a text editor and replace `your-...-key-here` with your real keys:
 
 ```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/policylens?schema=public"
-GEMINI_API_KEY=your-gemini-api-key
-OPENROUTER_API_KEY=your-openrouter-api-key
+# Database (port 5434 — must match docker-compose.yml)
+DATABASE_URL="postgresql://postgres:postgres@localhost:5434/policylens?schema=public"
+
+# Groq API (free tier - https://console.groq.com)
+GROQ_API_KEY="your-groq-api-key-here"
+GROQ_MODEL="llama-3.3-70b-versatile"
+GROQ_CHAT_MODEL="llama-3.1-8b-instant"
+
+# Gemini (primary extraction provider - https://aistudio.google.com/apikey)
+GEMINI_API_KEY="your-gemini-api-key-here"
+GEMINI_MODEL="gemini-2.0-flash"
+GEMINI_CHAT_MODEL="gemini-2.0-flash"
+
+# Optional — NVIDIA NIM fallback (dev-only, https://build.nvidia.com)
+NVIDIA_API_KEY="your-nvidia-api-key-here"
+
+# Optional — OpenRouter, only for the translation feature
+OPENROUTER_API_KEY="your-openrouter-api-key-here"
+
+# Server
 PORT=3000
 ```
 
-### 4. Run Database Migrations
+> **Minimum to run:** `DATABASE_URL` + at least one of `GROQ_API_KEY` / `GEMINI_API_KEY`. Add `OPENROUTER_API_KEY` only if you want translation to work.
+
+### Step 4 — Create the database tables
+
+The database is empty right now. This command creates the tables PolicyLens expects:
 
 ```bash
 cd backend
 npx prisma migrate dev
 ```
 
-### 5. Start All Services
+On first run this applies the migration `20260729161605_fix_text_embedding`. If the schema hasn't changed, it reports "already in sync" — that's fine, nothing to do.
+
+### Step 5 — Start the three services
+
+Each service runs in its **own terminal window** (or tab), because each keeps running and printing log output. Keep them all open.
+
+**Terminal 1 — AI Service** (needs the virtual environment activated):
 
 ```bash
-# Terminal 1 — AI Service
 cd ai-service
-venv\Scripts\activate
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS/Linux
 uvicorn app.main:app --port 8001 --reload
+```
 
-# Terminal 2 — Backend
+**Terminal 2 — Backend API:**
+
+```bash
 cd backend
 npm run dev
+```
 
-# Terminal 3 — Frontend
+**Terminal 3 — Frontend:**
+
+```bash
 cd frontend
 npm run dev
 ```
 
-Open **http://localhost:5173** in Chrome or Edge.
+All three print "running" messages when ready.
+
+### Step 6 — Open and test the app
+
+1. Open **http://localhost:5173** in Chrome or Edge.
+2. Upload a sample policy PDF from [`samples/`](samples/) (digital-text PDFs only — scanned documents show the "digital PDFs only" message).
+
+To confirm the servers are healthy from the command line:
+
+```bash
+curl http://localhost:3000/health    # backend — expect {"status":"ok"}
+curl http://localhost:8001/health    # AI service — expect {"status":"ok"}
+```
+
+### Common problems
+
+| Problem | Fix |
+|---------|-----|
+| `curl` fails or the page shows connection refused | One of the three services isn't running — check all three terminals for error messages |
+| Upload shows "API key not configured" | `.env` is missing a key or still contains `your-...-key-here` — revisit [Step 3](#3-configure-environment) |
+| Database connection errors | `docker compose up -d` wasn't run, or the container didn't become healthy — revisit [Step 2](#2-start-the-database) |
+| `EADDRINUSE` / "port already in use" | Something else occupies port 3000/8001/5173 — stop it or change `PORT` in `.env` |
+| AI Service can't find `app` | The virtual environment isn't activated in that terminal — re-run the `activate` line |
 
 ---
 
@@ -254,27 +347,33 @@ PolicyLens/
 │
 ├── frontend/                    # React + Vite + Tailwind + framer-motion
 │   └── src/
-│       ├── App.jsx              # Main app (3-column layout)
-│       ├── index.css            # Tailwind theme + premium utility classes
+│       ├── App.jsx              # Main app (nav-driven views)
+│       ├── main.jsx             # Entry point
 │       ├── components/
-│       │   ├── ScoreCard.jsx    # Animated gauge, strength badge, digit roll
-│       │   ├── FlagCard.jsx     # Expandable flag cards with framer-motion
-│       │   ├── ChatPanel.jsx    # RAG chat with grounded/ungrounded badges
-│       │   ├── UploadZone.jsx   # 6-state drag/drop zone
-│       │   ├── ProcessingOverlay.jsx  # 5-stage progress with skeletons
-│       │   ├── ReportCard.jsx   # Printable shareable score card
-│       │   ├── PitchCompare.jsx # Sales pitch contradiction checker
-│       │   ├── ScenarioSimulator.jsx  # Real-world scenario walkthroughs
-│       │   ├── ComparisonView.jsx     # Side-by-side policy comparison
-│       │   ├── VoiceInput.jsx   # Web Speech API + translation
-│       │   ├── GrievanceAssist.jsx    # Editable complaint draft generator
-│       │   ├── RenewalWatch.jsx # Renewal version diff
-│       │   └── CommunityClauses.jsx   # Community clause database browser
-│       └── components/ui/
-│           ├── VerificationStamp.tsx   # Stamp icon (dashed for low confidence)
-│           ├── SeverityBadge.tsx       # Severity pill indicator
-│           ├── RupeeDisplay.tsx        # Indian-format currency display
-│           └── LanguageToggle.tsx      # Hindi/English language switch
+│       │   ├── SideNav.jsx          # Left navigation rail
+│       │   ├── UploadZone.jsx       # 6-state drag/drop zone
+│       │   ├── ProcessingView.jsx   # Upload → analysis progress
+│       │   ├── ScoreCard.jsx        # Animated gauge, strength badge, digit roll
+│       │   ├── FlagCard.jsx         # Expandable flag cards with framer-motion
+│       │   ├── ChatPanel.jsx        # RAG chat with grounded/ungrounded badges
+│       │   ├── ChatBottomSheet.jsx  # Mobile chat drawer
+│       │   ├── ClaimsView.jsx       # Claims insights view
+│       │   ├── ScenarioSimulator.jsx    # Real-world scenario walkthroughs
+│       │   ├── ComparisonView.jsx   # Side-by-side policy comparison
+│       │   ├── ReportCard.jsx       # Printable shareable score card
+│       │   ├── PitchCompare.jsx     # Sales pitch contradiction checker
+│       │   ├── VoiceInput.jsx       # Web Speech API + translation
+│       │   ├── GrievanceAssist.jsx  # Editable complaint draft generator
+│       │   ├── RenewalWatch.jsx     # Renewal version diff
+│       │   └── CommunityClauses.jsx # Community clause database browser
+│       ├── components/ui/
+│       │   ├── VerificationStamp.tsx   # Stamp icon (dashed for low confidence)
+│       │   ├── SeverityBadge.tsx       # Severity pill indicator
+│       │   ├── RupeeDisplay.tsx        # Indian-format currency display
+│       │   └── LanguageToggle.tsx      # Hindi/English language switch
+│       └── lib/
+│           ├── useMediaQuery.js    # Responsive viewport hook
+│           └── rupee.ts            # Indian currency formatting
 │
 ├── backend/                     # Node/Express + Prisma + TypeScript
 │   └── src/
@@ -312,16 +411,21 @@ PolicyLens/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/documents` | Upload a policy PDF |
-| `POST` | `/api/documents/:id/chat` | Ask a question about a document |
-| `POST` | `/api/documents/:id/simulate/:scenarioId` | Run a scenario simulation |
+| `POST` | `/api/documents` | Upload a policy PDF (multipart, field `file`) → runs full analysis pipeline |
+| `GET` | `/api/documents/:id` | Get document with clauses, flags, score |
+| `GET` | `/api/documents/:documentId/status` | Check analysis status |
 | `POST` | `/api/documents/compare` | Compare multiple policies |
+| `POST` | `/api/documents/:documentId/simulate/:scenarioId` | Run a scenario simulation |
+| `GET` | `/api/scenarios` | List available scenarios |
+| `POST` | `/api/chat/:documentId/embed` | Embed a document's text for RAG chat |
+| `POST` | `/api/chat/:documentId/chat` | Ask a question about a document (RAG-grounded) |
+| `GET` | `/api/chat/:documentId/messages` | Get chat history for a document |
 | `POST` | `/api/pitch-compare` | Check sales pitch against document |
 | `GET` | `/api/report-card/:documentId` | Get shareable report card |
 | `POST` | `/api/explain-simplify` | Simplify insurance text |
-| `POST` | `/api/translate` | Translate text to regional language |
+| `POST` | `/api/translate` | Translate text to regional language (needs `OPENROUTER_API_KEY`) |
 | `POST` | `/api/grievance-draft` | Generate a grievance complaint draft |
-| `GET` | `/api/renewal-watch/:id` | Get renewal version comparison |
+| `GET` | `/api/renewal-watch/:documentId` | Get renewal version comparison |
 | `GET` | `/api/community-clauses` | List community clause database |
 | `GET` | `/health` | Health check |
 
@@ -329,10 +433,11 @@ PolicyLens/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/extract` | Extract structured data from PDF text |
+| `POST` | `/extract` | Extract raw text from a PDF (multipart, field `file`) |
+| `POST` | `/extract-clauses` | Extract structured clause data (JSON schema, provider failover) |
+| `POST` | `/embed` | Chunk text and store for retrieval |
 | `POST` | `/chat` | RAG-grounded chat answer |
-| `POST` | `/explain` | Generate plain-language explanation |
-| `POST` | `/translate` | Translate text via OpenRouter Gemini |
+| `POST` | `/generate-explanation` | Fill a plain-language template for a flag rule |
 | `GET` | `/health` | Health check |
 
 ---
@@ -387,17 +492,17 @@ npx vitest run
 
 | Module | Test File | Tests |
 |--------|-----------|-------|
-| Flag Engine | `flag-engine.test.ts` | 44 |
-| Rupee-at-Risk | `rupee-at-risk.test.ts` | 8 |
-| Score | `score.test.ts` | 18 |
-| Scenarios | `scenarios.test.ts` | 12 |
-| Pitch Compare | `pitch-compare.test.ts` | 10 |
-| Report Card | `report-card.test.ts` | 11 |
-| Explain Simplify | `explain-simplify.test.ts` | 18 |
-| Grievance | `grievance.test.ts` | 4 |
-| Renewal Watch | `renewal-watch.test.ts` | 4 |
-| Community Clauses | `community-clauses.test.ts` | 5 |
-| Translate | `translate.test.ts` | 3 |
+| Flag Engine | `src/flag-engine/__tests__/flag-engine.test.ts` | 44 |
+| Rupee-at-Risk | `src/flag-engine/__tests__/rupee-at-risk.test.ts` | 8 |
+| Score | `src/flag-engine/__tests__/score.test.ts` | 18 |
+| Scenarios | `src/scenario-simulator/__tests__/scenarios.test.ts` | 12 |
+| Pitch Compare | `src/pitch-compare/__tests__/pitch-compare.test.ts` | 10 |
+| Report Card | `src/report-card/__tests__/report-card.test.ts` | 11 |
+| Explain Simplify | `src/explain-simplify/__tests__/explain-simplify.test.ts` | 18 |
+| Grievance | `src/grievance/__tests__/grievance.test.ts` | 4 |
+| Renewal Watch | `src/renewal-watch/__tests__/renewal-watch.test.ts` | 4 |
+| Community Clauses | `src/data/__tests__/community-clauses.test.ts` | 5 |
+| Translate | `src/translate/__tests__/translate.test.ts` | 3 |
 
 ### Verification Discipline
 

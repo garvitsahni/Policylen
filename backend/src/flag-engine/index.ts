@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { calculateRupeeAtRisk } from './rupee-at-risk.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -81,6 +82,81 @@ function getField(clauses: ExtractedClause[], path: string): unknown {
     if (val !== undefined) return val;
   }
   return undefined;
+}
+
+function getFieldFromClause(clause: ExtractedClause, path: string): unknown {
+  const parts = path.split('.');
+  const fields = clause.fieldsJson as Record<string, unknown>;
+  let val: unknown = fields;
+  for (const part of parts) {
+    if (val && typeof val === 'object') {
+      const obj = val as Record<string, unknown>;
+      if (part in obj) {
+        val = obj[part];
+      } else {
+        return undefined;
+      }
+    } else {
+      return undefined;
+    }
+  }
+  return val;
+}
+
+const DISCRETIONARY_PATTERNS = [
+  'sole discretion',
+  'reasonable and customary',
+  "at the company's discretion",
+  "at the insurer's discretion",
+  'as determined by',
+  'in the opinion of the company',
+];
+
+const RULE_SOURCE_PATHS: Record<string, string[]> = {
+  R01: ['room_rent_clause.cap_type', 'room_rent_clause.cap_value'],
+  R02: ['sum_insured', 'sub_limits'],
+  R03: ['co_pay.percentage'],
+  R04: ['ped_waiting_period_months', 'waiting_periods'],
+  R05: ['initial_waiting_days', 'waiting_periods'],
+  R06: ['waiting_periods'],
+  R07: ['non_disclosure_clause_present', 'non_disclosure_scope'],
+  R08: ['discretionary_language_excerpt'],
+  R09: ['sub_limits'],
+  R10: ['network_clause.non_network_payout_reduced'],
+  R11: ['renewal_clause.claims_based_loading', 'renewal_clause.guaranteed_renewal'],
+  R12: ['exclusions'],
+  R13: ['claim_process'],
+  G01: ['room_rent_clause.cap_type'],
+  G02: ['co_pay.explicitly_absent', 'co_pay.percentage'],
+  G03: ['ped_waiting_period_months', 'ped_explicitly_stated'],
+  G04: ['restoration_benefit.present'],
+  G05: ['no_sub_limits_statement_present'],
+  G06: ['cumulative_bonus.present'],
+  G07: ['network_clause.cashless_default', 'network_clause.network_size_stated'],
+};
+
+function findInArrays(
+  clauses: ExtractedClause[],
+  arrayPath: string,
+  entryField: string,
+  predicate?: (entry: Record<string, unknown>) => boolean
+): unknown {
+  for (const clause of clauses) {
+    const arr = getFieldFromClause(clause, arrayPath);
+    if (Array.isArray(arr)) {
+      for (const entry of arr) {
+        if (entry && typeof entry === 'object') {
+          const obj = entry as Record<string, unknown>;
+          if (entryField in obj && (!predicate || predicate(obj))) return obj[entryField];
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function formatCurrency(n: number): string {
+  return `₹${n.toLocaleString('en-IN')}`;
 }
 
 function hasPermanentExclusions(clauses: ExtractedClause[]): boolean {
@@ -268,75 +344,147 @@ function evaluateGreenFlag(ruleId: string, clauses: ExtractedClause[]): boolean 
   }
 }
 
-function fillTemplate(template: string, clause: ExtractedClause | null, allClauses: ExtractedClause[]): string {
-  const fields = clause?.fieldsJson as Record<string, unknown> | undefined;
+function resolveWaitingPeriodMonths(clauses: ExtractedClause[], ruleId: string): number | undefined {
+  let n: unknown;
+  if (ruleId === 'R06') {
+    n = findInArrays(clauses, 'waiting_periods', 'period_months', e => e.period_type === 'specific_disease');
+  } else if (ruleId === 'R04' || ruleId === 'G03') {
+    n = getField(clauses, 'ped_waiting_period_months');
+    if (typeof n !== 'number') {
+      n = findInArrays(clauses, 'waiting_periods', 'period_months', e => e.period_type === 'ped');
+    }
+  }
+  return typeof n === 'number' ? n : undefined;
+}
+
+function resolveCondition(clauses: ExtractedClause[], ruleId: string): string | undefined {
+  if (ruleId === 'R12') {
+    const c = findInArrays(clauses, 'exclusions', 'condition');
+    if (typeof c === 'string') return c;
+  }
+  if (ruleId === 'R06') {
+    const c = findInArrays(clauses, 'waiting_periods', 'condition', e => e.period_type === 'specific_disease');
+    if (typeof c === 'string') return c;
+  }
+  if (ruleId === 'R04') {
+    const c = findInArrays(clauses, 'waiting_periods', 'condition', e => e.period_type === 'ped');
+    if (typeof c === 'string') return c;
+  }
+  return undefined;
+}
+
+function fillTemplate(template: string, ruleId: string, _clause: ExtractedClause | null, allClauses: ExtractedClause[]): string {
   let result = template;
+
   result = result.replace(/\{cap_value\}/g, () => {
-    const cc = fields?.room_rent_clause as Record<string, unknown> | undefined;
+    const cc = getField(allClauses, 'room_rent_clause') as Record<string, unknown> | undefined;
     const cv = cc?.cap_value;
-    if (typeof cv === 'number') return cv.toString();
-    const rc = getField(allClauses, 'room_rent_clause.cap_value');
-    return rc !== undefined ? String(rc) : 'a certain amount';
+    const capType = String(cc?.cap_type || '');
+    if (typeof cv === 'number') {
+      if (capType.includes('percent')) return `${cv}% of your sum insured`;
+      if (capType.includes('fixed')) return `${formatCurrency(cv)}/day`;
+      return cv.toString();
+    }
+    return 'a certain amount';
   });
+
   result = result.replace(/\{sum_insured\}/g, () => {
     const si = getField(allClauses, 'sum_insured');
-    return si !== undefined ? `₹${Number(si).toLocaleString('en-IN')}` : 'the sum insured';
+    return typeof si === 'number' ? formatCurrency(si) : 'the sum insured';
   });
-  result = result.replace(/\{procedure\}/g, () => (fields?.procedure as string) || 'this procedure');
+
+  result = result.replace(/\{procedure\}/g, () => {
+    const fromSub = findInArrays(allClauses, 'sub_limits', 'procedure');
+    if (typeof fromSub === 'string') return fromSub;
+    const fromWp = findInArrays(allClauses, 'waiting_periods', 'condition');
+    if (typeof fromWp === 'string') return fromWp;
+    return 'this procedure';
+  });
+
   result = result.replace(/\{sub_limit_value\}/g, () => {
-    const cv = fields?.cap_value;
-    return cv !== undefined ? `₹${Number(cv).toLocaleString('en-IN')}` : 'a capped amount';
+    const cv = findInArrays(allClauses, 'sub_limits', 'cap_value');
+    return typeof cv === 'number' ? formatCurrency(cv) : 'a capped amount';
   });
+
   result = result.replace(/\{co_pay_pct\}/g, () => {
-    const cp = fields?.co_pay as Record<string, unknown> | undefined;
+    const cp = getField(allClauses, 'co_pay') as Record<string, unknown> | undefined;
     return cp?.percentage !== undefined ? String(cp.percentage) : 'a certain percentage';
   });
+
   result = result.replace(/\{calculated_amount\}/g, () => {
-    const cp = fields?.co_pay as Record<string, unknown> | undefined;
+    const cp = getField(allClauses, 'co_pay') as Record<string, unknown> | undefined;
     const pct = typeof cp?.percentage === 'number' ? cp.percentage : 0;
-    return `₹${((pct / 100) * 200000).toLocaleString('en-IN')}`;
+    const si = getField(allClauses, 'sum_insured');
+    const base = typeof si === 'number' && si > 0 ? si : 200000;
+    return formatCurrency(Math.round((pct / 100) * base));
   });
-  result = result.replace(/\{waiting_period\}/g, () => (fields?.period_months as string) || (fields?.period_months as number)?.toString() || 'a certain period');
-  result = result.replace(/\{condition\}/g, () => (fields?.condition as string) || 'a pre-existing condition');
-  result = result.replace(/\{condition_or_treatment\}/g, () => (fields?.condition as string) || 'this condition');
+
+  result = result.replace(/\{waiting_period\}/g, () => {
+    const n = resolveWaitingPeriodMonths(allClauses, ruleId);
+    return typeof n === 'number' ? `${n} months` : 'a certain period';
+  });
+
+  result = result.replace(/\{condition\}/g, () => resolveCondition(allClauses, ruleId) || 'a pre-existing condition');
+  result = result.replace(/\{condition_or_treatment\}/g, () => resolveCondition(allClauses, ruleId) || 'this condition');
+
   result = result.replace(/\{timeframe\}/g, () => {
     const deadline = getIntimationDeadlineHours(allClauses);
     return deadline !== null ? `${deadline} hours` : 'the specified timeframe';
   });
+
   result = result.replace(/\{value\}/g, () => {
-    const cv = fields?.cap_value;
-    return cv !== undefined ? `₹${Number(cv).toLocaleString('en-IN')}` : 'a capped amount';
+    const cv = findInArrays(allClauses, 'sub_limits', 'cap_value');
+    return typeof cv === 'number' ? formatCurrency(cv) : 'a capped amount';
   });
+
   result = result.replace(/\{insurer\}/g, () => {
     const ins = getField(allClauses, 'insurer_name');
-    return (ins as string) || 'the insurer';
+    return typeof ins === 'string' ? ins : 'the insurer';
   });
+
   result = result.replace(/\{examples\}/g, 'cataract, hernia, joint replacement');
   return result;
 }
 
 function findMatchingClause(clauses: ExtractedClause[], rule: TaxonomyFlag): ExtractedClause | null {
-  if (rule.requiredFields.length === 0) {
-    return clauses[0] || null;
-  }
-for (const clause of clauses) {
-    const fields = clause.fieldsJson as Record<string, unknown>;
-    for (const field of rule.requiredFields) {
-      const parts = field.split('_');
-      let val: unknown = fields;
-      for (const part of parts) {
-        if (val && typeof val === 'object') {
-          val = (val as Record<string, unknown>)[part];
-        } else {
-          val = undefined;
-          break;
-        }
+  const paths = RULE_SOURCE_PATHS[rule.id];
+  if (paths && paths.length > 0) {
+    for (const clause of clauses) {
+      for (const path of paths) {
+        if (getFieldFromClause(clause, path) !== undefined) return clause;
       }
-      if (val !== undefined) return clause;
+      if (rule.id === 'R08') {
+        const text = (clause.rawText || '').toLowerCase();
+        if (DISCRETIONARY_PATTERNS.some(p => text.includes(p))) return clause;
+      }
     }
   }
-  if (clauses.length > 0) return clauses[0];
-  return null;
+  return clauses[0] || null;
+}
+
+function computeFlagRupeeAtRisk(ruleId: string, clauses: ExtractedClause[]): number | null {
+  const si = getField(clauses, 'sum_insured');
+  const sumInsured = typeof si === 'number' && si > 0 ? si : null;
+
+  switch (ruleId) {
+    case 'R03': {
+      const cp = getField(clauses, 'co_pay') as Record<string, unknown> | undefined;
+      const pct = typeof cp?.percentage === 'number' ? cp.percentage : null;
+      if (pct !== null && pct > 0 && sumInsured !== null) {
+        return calculateRupeeAtRisk({ claimAmount: sumInsured, coPayPct: pct }).amount;
+      }
+      return null;
+    }
+    case 'R02': {
+      const cap = findInArrays(clauses, 'sub_limits', 'cap_value');
+      if (sumInsured !== null && typeof cap === 'number' && cap > 0) {
+        return calculateRupeeAtRisk({ sumInsured, claimAmount: sumInsured, subLimitCap: cap }).amount;
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
 }
 
 export function matchFlags(clauses: ExtractedClause[]): MatchResult {
@@ -349,8 +497,8 @@ export function matchFlags(clauses: ExtractedClause[]): MatchResult {
     const triggered = evaluateRedFlag(rule.id, clauses);
     if (triggered) {
       const sourceClause = findMatchingClause(clauses, rule);
-      const explanation = sourceClause ? fillTemplate(rule.template, sourceClause, clauses) : rule.template;
-      const penalty = taxonomy.scoreWeights.severityPenalty[rule.severity || 'medium'] || 8;
+      const explanation = sourceClause ? fillTemplate(rule.template, rule.id, sourceClause, clauses) : rule.template;
+      const penalty = taxonomy.scoreWeights.severityPenalty[rule.severity.toLowerCase()] || 8;
       score -= penalty;
       breakdown[rule.id] = -penalty;
       flags.push({
@@ -359,6 +507,7 @@ export function matchFlags(clauses: ExtractedClause[]): MatchResult {
         severity: rule.severity,
         explanation,
         sourceExcerpt: sourceClause?.rawText || '',
+        rupeeAtRisk: computeFlagRupeeAtRisk(rule.id, clauses),
       });
     }
   }
@@ -369,7 +518,7 @@ export function matchFlags(clauses: ExtractedClause[]): MatchResult {
     const triggered = evaluateGreenFlag(rule.id, clauses);
     if (triggered && greenBonusUsed < greenBonusCap) {
       const sourceClause = findMatchingClause(clauses, rule);
-      const explanation = sourceClause ? fillTemplate(rule.template, sourceClause, clauses) : rule.template;
+      const explanation = sourceClause ? fillTemplate(rule.template, rule.id, sourceClause, clauses) : rule.template;
       score += taxonomy.scoreWeights.greenBonus;
       greenBonusUsed += taxonomy.scoreWeights.greenBonus;
       breakdown[rule.id] = taxonomy.scoreWeights.greenBonus;

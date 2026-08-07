@@ -43,6 +43,10 @@ app.post('/api/explain-simplify', (req, res) => {
   }
 });
 
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'policylens-backend' });
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });

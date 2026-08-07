@@ -1,3 +1,4 @@
+import { describe, test, expect } from 'vitest';
 import { comparePitch, type PitchClaim } from '../index.js';
 import type { ExtractedClause } from '../../flag-engine/index.js';
 
@@ -16,7 +17,7 @@ function makeClause(overrides: Partial<ExtractedClause> = {}): ExtractedClause {
 }
 
 describe('comparePitch', () => {
-  it('detects contradiction when salesperson claims no co-pay but document has co-pay', () => {
+  test('detects contradiction when salesperson claims no co-pay but document has co-pay', () => {
     const clauses = [makeClause({
       clauseType: 'co_pay',
       fieldsJson: { co_pay: { percentage: 20, applicable_on: 'all_admissions' } } as Record<string, unknown>,
@@ -30,7 +31,7 @@ describe('comparePitch', () => {
     expect(copayContra!.severity).toBe('contradiction');
   });
 
-  it('confirms when salesperson correctly claims no co-pay and document has none', () => {
+  test('confirms when salesperson correctly claims no co-pay and document has none', () => {
     const clauses = [makeClause({
       clauseType: 'co_pay',
       fieldsJson: {} as Record<string, unknown>,
@@ -43,7 +44,7 @@ describe('comparePitch', () => {
     expect(copayContra!.severity).toBe('match');
   });
 
-  it('detects contradiction when salesperson claims no PED wait but document has 48-month wait', () => {
+  test('detects contradiction when salesperson claims no PED wait but document has 48-month wait', () => {
     const clauses = [makeClause({
       clauseType: 'ped_waiting_period_months',
       fieldsJson: { waiting_periods: [{ period_type: 'ped', period_months: 48 }] } as Record<string, unknown>,
@@ -57,7 +58,7 @@ describe('comparePitch', () => {
     expect(pedContra!.explanation).toContain('48-month');
   });
 
-  it('detects contradiction when salesperson claims no sub-limits but document has them', () => {
+  test('detects contradiction when salesperson claims no sub-limits but document has them', () => {
     const clauses = [makeClause({
       clauseType: 'clause_with_sub_limits',
       fieldsJson: {
@@ -73,7 +74,7 @@ describe('comparePitch', () => {
     expect(subContra!.explanation).toContain('sub-limits');
   });
 
-  it('warns when cashless claim cannot be verified', () => {
+  test('warns when cashless claim cannot be verified', () => {
     const clauses = [makeClause({
       clauseType: 'network_clause',
       fieldsJson: {} as Record<string, unknown>,
@@ -86,7 +87,7 @@ describe('comparePitch', () => {
     expect(cashlessContra!.severity).toBe('warning');
   });
 
-  it('detects contradiction when salesperson claims maternity coverage but policy excludes it', () => {
+  test('detects contradiction when salesperson claims maternity coverage but policy excludes it', () => {
     const clauses = [makeClause({
       clauseType: 'exclusions',
       fieldsJson: {
@@ -101,7 +102,7 @@ describe('comparePitch', () => {
     expect(matContra!.severity).toBe('contradiction');
   });
 
-  it('returns empty result when pitch has no recognizable claims', () => {
+  test('returns empty result when pitch has no recognizable claims', () => {
     const clauses = [makeClause()];
     const pitch = 'This is the best policy ever, buy it today!';
     const result = comparePitch(pitch, clauses);
@@ -110,7 +111,7 @@ describe('comparePitch', () => {
     expect(result.summary.total).toBe(0);
   });
 
-  it('provides source excerpt for contradictions', () => {
+  test('provides source excerpt for contradictions', () => {
     const clauses = [makeClause({
       clauseType: 'co_pay',
       fieldsJson: { co_pay: { percentage: 20 } } as Record<string, unknown>,
@@ -123,7 +124,7 @@ describe('comparePitch', () => {
     expect(copayContra!.sourceExcerpt).toContain('20%');
   });
 
-  it('matches multiple claims in a single pitch', () => {
+  test('matches multiple claims in a single pitch', () => {
     const clauses = [
       makeClause({
         clauseType: 'co_pay',
@@ -142,7 +143,7 @@ describe('comparePitch', () => {
     expect(result.summary.contradictions).toBeGreaterThanOrEqual(2);
   });
 
-  it('returns summary with correct counts', () => {
+  test('returns summary with correct counts', () => {
     const clauses = [makeClause({
       clauseType: 'co_pay',
       fieldsJson: { co_pay: { percentage: 10 } } as Record<string, unknown>,

@@ -1,11 +1,12 @@
+import { describe, test, expect } from 'vitest';
 import { COMMUNITY_CLAUSES } from '../../data/community-clauses.js';
 
 describe('COMMUNITY_CLAUSES', () => {
-  it('contains at least 10 clauses', () => {
+  test('contains at least 10 clauses', () => {
     expect(COMMUNITY_CLAUSES.length).toBeGreaterThanOrEqual(10);
   });
 
-  it('each clause has required fields', () => {
+  test('each clause has required fields', () => {
     for (const c of COMMUNITY_CLAUSES) {
       expect(c.id).toBeTruthy();
       expect(c.clauseType).toBeTruthy();
@@ -17,19 +18,19 @@ describe('COMMUNITY_CLAUSES', () => {
     }
   });
 
-  it('includes both positive and negative clauses', () => {
+  test('includes both positive and negative clauses', () => {
     const positives = COMMUNITY_CLAUSES.filter(c => c.averageImpact === 'positive');
     const negatives = COMMUNITY_CLAUSES.filter(c => c.averageImpact === 'negative');
     expect(positives.length).toBeGreaterThanOrEqual(4);
     expect(negatives.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('has unique IDs', () => {
+  test('has unique IDs', () => {
     const ids = COMMUNITY_CLAUSES.map(c => c.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('all confirmed counts are reasonable', () => {
+  test('all confirmed counts are reasonable', () => {
     for (const c of COMMUNITY_CLAUSES) {
       expect(c.confirmedCount).toBeGreaterThanOrEqual(0);
       expect(c.confirmedCount).toBeLessThanOrEqual(10000);

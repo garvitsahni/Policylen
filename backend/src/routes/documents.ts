@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { fetch as undiciFetch, FormData as UndiciFormData, Agent as UndiciAgent } from 'undici';
 import prisma from '../prisma.js';
 import { matchFlags } from '../flag-engine/index.js';
 import { computePolicyScore } from '../flag-engine/score.js';
@@ -14,6 +15,28 @@ const router = express.Router();
 const upload = multer({ dest: join(__dirname, '../../uploads') });
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8001';
+
+// Helper function with timeout.
+// Node's built-in fetch (undici) applies a default 300s headersTimeout that can
+// fire before our AbortController timeout. Use undici's own fetch with a
+// dedicated Agent whose built-in timeouts are disabled so the AbortController
+// is the single authority. (Both must come from the same undici instance.)
+const noHeaderTimeoutAgent = new UndiciAgent({ headersTimeout: 0, bodyTimeout: 0 });
+const fetchWithTimeout = async (url, options = {}, timeout = 60000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await undiciFetch(url, {
+      ...options,
+      dispatcher: noHeaderTimeoutAgent,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
+};
 
 router.post('/', upload.single('file'), async (req, res) => {
   try {
@@ -31,15 +54,17 @@ router.post('/', upload.single('file'), async (req, res) => {
     const fs = await import('fs');
 
     // Step 1: Extract raw text from PDF
-    const formData = new FormData();
+    // undici's fetch only recognizes undici's own FormData; the global
+    // FormData produces a body FastAPI cannot parse (missing "file" part).
+    const formData = new UndiciFormData();
     const fileBuffer = fs.readFileSync(req.file.path);
     const blob = new Blob([fileBuffer], { type: 'application/pdf' });
     formData.append('file', blob, req.file.originalname);
 
-    const aiResponse = await fetch(`${AI_SERVICE_URL}/extract`, {
+    const aiResponse = await fetchWithTimeout(`${AI_SERVICE_URL}/extract`, {
       method: 'POST',
       body: formData,
-    });
+    }, 60000);
 
     if (!aiResponse.ok) {
       const error = await aiResponse.json();
@@ -58,14 +83,15 @@ router.post('/', upload.single('file'), async (req, res) => {
       data: { status: 'analyzing' },
     });
 
-    const clauseRes = await fetch(`${AI_SERVICE_URL}/extract-clauses`, {
+    const clauseTimeout = Number(process.env.CLAUSE_EXTRACTION_TIMEOUT_MS) || 300000;
+    const clauseRes = await fetchWithTimeout(`${AI_SERVICE_URL}/extract-clauses`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         documentId: document.id,
         extractedText,
       }),
-    });
+    }, clauseTimeout);
 
     if (!clauseRes.ok) {
       const error = await clauseRes.json();
@@ -98,7 +124,12 @@ router.post('/', upload.single('file'), async (req, res) => {
     // Update document with insurer and sum insured
     const updateData: Record<string, unknown> = { status: 'analyzed' };
     if (insurerName) updateData.insurerName = insurerName;
-    if (extraction.sum_insured) updateData.sumInsured = extraction.sum_insured;
+    // sum_insured may be a single number or (for plans with SI options per
+    // plan) an object listing the options. The DB column is Int, and we never
+    // fabricate a figure — only store a real number when one is stated.
+    if (typeof extraction.sum_insured === 'number' && Number.isFinite(extraction.sum_insured)) {
+      updateData.sumInsured = extraction.sum_insured;
+    }
 
     // Step 4: Run flag matching and scoring
     const { flags: flagEngineFlags, score: flagScore } = matchFlags(flagEngineClauses);
@@ -159,6 +190,25 @@ router.post('/', upload.single('file'), async (req, res) => {
       data: updateData,
     });
 
+    // Step 7: Store retrieval chunks so grounded chat works
+    let embedWarning: string | undefined;
+    try {
+      const embedRes = await fetchWithTimeout(`${AI_SERVICE_URL}/embed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentId: document.id,
+          text: extractedText,
+        }),
+      }, 60000);
+      if (!embedRes.ok) {
+        const embedErr = await embedRes.json();
+        embedWarning = embedErr.detail || `Embed failed with status ${embedRes.status}`;
+      }
+    } catch (embedError) {
+      embedWarning = embedError instanceof Error ? embedError.message : 'Embed failed';
+    }
+
     // Clean up uploaded file
     fs.unlinkSync(req.file.path);
 
@@ -174,7 +224,8 @@ router.post('/', upload.single('file'), async (req, res) => {
         settlementRatioMatchedInsurer: policyScore.settlementRatioMatchedInsurer,
       },
       insurerName,
-      sumInsured: extraction.sum_insured || null,
+      sumInsured: typeof extraction.sum_insured === 'number' ? extraction.sum_insured : null,
+      embedWarning,
       message: 'Analysis complete',
     });
   } catch (error) {

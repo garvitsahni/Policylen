@@ -1,3 +1,4 @@
+import { describe, test, expect } from 'vitest';
 import { matchFlags } from '../index.js';
 import type { ExtractedClause } from '../index.js';
 
