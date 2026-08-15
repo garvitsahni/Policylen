@@ -322,7 +322,7 @@ def call_gemini(system_prompt: str, user_prompt: str, *, model: str = None, max_
 def call_llm(system_prompt: str, user_prompt: str, *, extraction: bool = False, chat: bool = False, max_tokens: int = 1024, temperature: float = 0.1, response_json: bool = False, response_schema: dict = None, fallback_prompt: str = None) -> dict:
     """Call the LLM with a purpose-specific fallback chain.
 
-    Extraction chain: OpenRouter (full-doc JSON) -> Gemini (JSON schema) -> NVIDIA NIM -> Groq (chunked).
+    Extraction chain: Gemini (JSON schema) -> OpenRouter (full-doc JSON) -> NVIDIA NIM -> Groq (chunked).
     Chat chain:       OpenRouter -> Groq -> NVIDIA NIM -> Gemini.
 
     Each provider is tried in order; the first success wins. If every provider
@@ -332,8 +332,8 @@ def call_llm(system_prompt: str, user_prompt: str, *, extraction: bool = False, 
     """
     if extraction:
         chain = [
-            ("openrouter", call_openrouter, {"model": OPENROUTER_EXTRACTION_MODEL, "response_json": response_json}),
             ("gemini", call_gemini, {"model": GEMINI_MODEL, "response_schema": response_schema}),
+            ("openrouter", call_openrouter, {"model": OPENROUTER_EXTRACTION_MODEL, "response_json": response_json}),
             ("nvidia", call_nvidia, {"model": NVIDIA_EXTRACTION_MODEL, "response_json": response_json}),
             ("groq", call_groq, {"model": GROQ_EXTRACTION_MODEL, "response_json": response_json}),
         ]
