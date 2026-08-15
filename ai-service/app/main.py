@@ -72,6 +72,8 @@ NVIDIA_CHAT_MODEL = os.getenv("NVIDIA_CHAT_MODEL", "nvidia/llama-3.3-nemotron-su
 
 MAX_RETRIES = 4
 
+_HTTP_SESSION = requests.Session()
+
 def load_taxonomy():
     with open(TAXONOMY_PATH, 'r', encoding='utf-8') as f:
         return json.load(f)
@@ -121,8 +123,8 @@ def call_openai_compatible(*, base_url: str, api_key: str, provider_label: str,
 
     for attempt in range(MAX_RETRIES):
         try:
-            response = requests.post(
-                url=f"{base_url}/chat/completions",
+            response = _HTTP_SESSION.post(
+                f"{base_url}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"

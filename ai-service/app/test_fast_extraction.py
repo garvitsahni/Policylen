@@ -95,5 +95,23 @@ class GeminiAuthFailFastTests(unittest.TestCase):
         sleep.assert_called()
 
 
+class HttpSessionTests(unittest.TestCase):
+
+    def test_call_openai_compatible_posts_via_shared_session(self):
+        response = mock.Mock(status_code=200)
+        response.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+        session = mock.Mock()
+        session.post.return_value = response
+        with mock.patch.object(main, '_HTTP_SESSION', session) as s, \
+             mock.patch.object(main.requests, 'post', side_effect=AssertionError('bare requests.post must not be used')):
+            result = main.call_openai_compatible(
+                base_url='https://example.com/v1', api_key='sk-test',
+                provider_label='Test', system_prompt='sys', user_prompt='user',
+                model='m', max_tokens=10, temperature=0.1, response_json=False)
+        self.assertEqual(result['answer'], 'ok')
+        s.post.assert_called_once()
+        self.assertIn('/chat/completions', s.post.call_args.args[0])
+
+
 if __name__ == '__main__':
     unittest.main()
