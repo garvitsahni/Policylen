@@ -294,13 +294,23 @@ def call_gemini(system_prompt: str, user_prompt: str, *, model: str = None, max_
             return {"answer": text.strip(), "grounded": False, "cited_clause_id": None, "raw_error": None}
         except Exception as e:
             error_str = str(e)
+            lower = error_str.lower()
             # Fail fast on quota exhausted errors
-            if "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+            if "RESOURCE_EXHAUSTED" in error_str or "quota" in lower:
                 return {
                     "answer": None,
                     "grounded": False,
                     "cited_clause_id": None,
                     "raw_error": f"Gemini quota exhausted: {error_str[:200]}"
+                }
+            # Fail fast on auth errors — a bad key will not heal on retry, and
+            # each backoff cycle wastes seconds before the fallback chain moves on.
+            if any(token in error_str for token in ("PERMISSION_DENIED", "UNAUTHENTICATED", "403", "401", "API key not valid")) or "invalid key" in lower or "not valid" in lower:
+                return {
+                    "answer": None,
+                    "grounded": False,
+                    "cited_clause_id": None,
+                    "raw_error": f"Gemini auth error: {error_str[:200]}"
                 }
             if attempt == MAX_RETRIES - 1:
                 return {

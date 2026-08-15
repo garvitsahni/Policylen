@@ -49,5 +49,42 @@ class ExtractionChainTests(unittest.TestCase):
         self.assertIn('groq', result['raw_error'])
 
 
+class GeminiAuthFailFastTests(unittest.TestCase):
+
+    def _make_client(self, exc):
+        client = mock.Mock()
+        client.models.generate_content.side_effect = exc
+        return client
+
+    def test_auth_error_returns_immediately_without_retry(self):
+        client = self._make_client(RuntimeError('API key not valid. Please pass a valid API key. (401)'))
+        with mock.patch.object(main, '_get_gemini_client', return_value=client), \
+             mock.patch.object(main.time, 'sleep') as sleep:
+            result = main.call_gemini('sys', 'user')
+        self.assertIsNone(result['answer'])
+        self.assertIn('API key not valid', result['raw_error'])
+        self.assertEqual(client.models.generate_content.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_permission_denied_returns_immediately_without_retry(self):
+        client = self._make_client(RuntimeError('403 PERMISSION_DENIED'))
+        with mock.patch.object(main, '_get_gemini_client', return_value=client), \
+             mock.patch.object(main.time, 'sleep') as sleep:
+            result = main.call_gemini('sys', 'user')
+        self.assertIsNone(result['answer'])
+        self.assertEqual(client.models.generate_content.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_quota_error_still_returns_immediately(self):
+        client = self._make_client(RuntimeError('429 RESOURCE_EXHAUSTED'))
+        with mock.patch.object(main, '_get_gemini_client', return_value=client), \
+             mock.patch.object(main.time, 'sleep') as sleep:
+            result = main.call_gemini('sys', 'user')
+        self.assertIsNone(result['answer'])
+        self.assertIn('quota exhausted', result['raw_error'])
+        self.assertEqual(client.models.generate_content.call_count, 1)
+        sleep.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()
