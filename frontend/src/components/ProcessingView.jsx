@@ -1,19 +1,56 @@
 import { useEffect, useState } from 'react'
 
-const steps = [
-  { en: 'Reading your document\u2026', hi: '\u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u092a\u0922\u093c \u0930\u0939\u0947 \u0939\u0948\u0902\u2026' },
-  { en: 'Matching clauses\u2026', hi: '\u0928\u093f\u092f\u092e\u094b\u0902 \u0915\u093e \u092e\u093f\u0932\u093e\u0928 \u0915\u0930 \u0930\u0939\u0947 \u0939\u0948\u0902\u2026' },
-  { en: 'Calculating your risk\u2026', hi: '\u091c\u094b\u0916\u093f\u092e \u0915\u0940 \u0917\u0923\u0928\u093e \u0939\u094b \u0930\u0939\u0940 \u0939\u0948\u2026' },
-]
+// Maps real backend pipeline status to the stage label shown to the user.
+// The backend document moves through: extracting → analyzing → analyzed/failed.
+const STEPS_BY_STATUS = {
+  extracting: { en: 'Reading your document\u2026', hi: '\u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u092a\u0922\u093c \u0930\u0939\u0947 \u0939\u0948\u0902\u2026' },
+  analyzing: { en: 'Calculating your risk\u2026', hi: '\u091c\u094b\u0916\u093f\u092e \u0915\u0940 \u0917\u0923\u0928\u093e \u0939\u094b \u0930\u0939\u0940 \u0939\u0948\u2026' },
+}
 
-export function ProcessingView() {
-  const [step, setStep] = useState(0)
+const REASSURANCE_DELAY_MS = 45000
+
+export function ProcessingView({ documentId, onFailed, onAnalyzed }) {
+  const [status, setStatus] = useState('extracting')
+  const [showReassurance, setShowReassurance] = useState(false)
 
   useEffect(() => {
-    if (step >= steps.length - 1) return
-    const timer = setTimeout(() => setStep(s => s + 1), 2500)
-    return () => clearTimeout(timer)
-  }, [step])
+    const reassuranceTimer = setTimeout(() => setShowReassurance(true), REASSURANCE_DELAY_MS)
+    return () => clearTimeout(reassuranceTimer)
+  }, [])
+
+  useEffect(() => {
+    if (!documentId) return
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/documents/${documentId}/status`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        if (data.status === 'failed') {
+          onFailed?.(data.error || 'Analysis failed')
+          return
+        }
+        if (data.status === 'analyzed') {
+          onAnalyzed?.(data)
+          return
+        }
+        if (data.status !== status) setStatus(data.status)
+      } catch (_) {
+        // transient network error — keep polling
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 3000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [documentId, onAnalyzed, onFailed, status])
+
+  const step = STEPS_BY_STATUS[status] || STEPS_BY_STATUS.extracting
 
   return (
     <main className="min-h-[calc(100vh-64px-80px)] flex items-center justify-center relative px-margin-desktop py-12">
@@ -77,9 +114,14 @@ export function ProcessingView() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor" />
               </svg>
-              <span className="font-headline-md text-headline-md tracking-wide">{steps[step].en}</span>
+              <span className="font-headline-md text-headline-md tracking-wide">{step.en}</span>
             </div>
-            <div className="font-body-md text-body-md opacity-70">{steps[step].hi}</div>
+            <div className="font-body-md text-body-md opacity-70">{step.hi}</div>
+            {showReassurance && (
+              <div className="mt-3 px-4 py-2 bg-kraft/40 border border-kraft rounded-lg text-label-md text-label-md opacity-90">
+                Free-tier analysis can take several minutes. Still working — you'll see the results as soon as they're ready.
+              </div>
+            )}
           </div>
         </div>
       </section>

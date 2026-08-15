@@ -41,22 +41,8 @@ function AppInner() {
 
       const data = await uploadRes.json()
       setDocumentId(data.documentId)
-
-      const backendFlags = (data.flags || []).map(f => ({
-        ...f,
-        colorType: f.colorType || 'red',
-        confidence: f.confidence || 'high',
-        pageNumber: f.pageNumber || null,
-      }))
-      setFlags(backendFlags)
-      setScore(data.score ? {
-        score: data.score.score,
-        maxScore: data.score.maxScore || 100,
-        flags: backendFlags,
-        settlementRatio: data.score.settlementRatio || null,
-      } : null)
-
-      setTimeout(() => setView('results'), 1000)
+      // ProcessingView polls GET /api/documents/:id/status and drives
+      // onAnalyzed / onFailed as the real pipeline progresses.
     } catch (err) {
       console.error('Analysis failed:', err)
       setFlags([])
@@ -64,6 +50,31 @@ function AppInner() {
       setError(err.message || 'Analysis failed')
       setView('error')
     }
+  }, [])
+
+  const handleAnalysisComplete = useCallback((data) => {
+    const backendFlags = (data.flags || []).map(f => ({
+      ...f,
+      colorType: f.colorType || 'red',
+      confidence: f.confidence || 'high',
+      pageNumber: f.pageNumber || null,
+    }))
+    setFlags(backendFlags)
+    setScore(data.score ? {
+      score: data.score.score,
+      maxScore: data.score.maxScore || 100,
+      flags: backendFlags,
+      settlementRatio: data.score.settlementRatio || null,
+    } : null)
+    setView('results')
+  }, [])
+
+  const handleAnalysisFailed = useCallback((message) => {
+    console.error('Analysis failed:', message)
+    setFlags([])
+    setScore(null)
+    setError(message || 'Analysis failed')
+    setView('error')
   }, [])
 
   const handleNewAnalysis = () => {
@@ -113,7 +124,11 @@ function AppInner() {
       {view === 'processing' && (
         <>
           {headerContent()}
-          <ProcessingView />
+          <ProcessingView
+            documentId={documentId}
+            onAnalyzed={handleAnalysisComplete}
+            onFailed={handleAnalysisFailed}
+          />
         </>
       )}
       {view === 'results' && (

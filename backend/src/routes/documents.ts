@@ -38,28 +38,21 @@ const fetchWithTimeout = async (url, options = {}, timeout = 60000) => {
   }
 };
 
-router.post('/', upload.single('file'), async (req, res) => {
+// The full analysis pipeline, run in the background after the upload request
+// responds. The frontend polls GET /:id/status for progress instead of
+// blocking on a single synchronous request (which previously showed a fake
+// animation for 10+ minutes while free-tier LLM extraction ran).
+async function runAnalysisPipeline(documentId: string, filePath: string, originalName: string): Promise<void> {
+  const fs = await import('fs');
+
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const document = await prisma.document.create({
-      data: {
-        fileName: req.file.originalname,
-        status: 'extracting',
-      },
-    });
-
-    const fs = await import('fs');
-
     // Step 1: Extract raw text from PDF
     // undici's fetch only recognizes undici's own FormData; the global
     // FormData produces a body FastAPI cannot parse (missing "file" part).
     const formData = new UndiciFormData();
-    const fileBuffer = fs.readFileSync(req.file.path);
+    const fileBuffer = fs.readFileSync(filePath);
     const blob = new Blob([fileBuffer], { type: 'application/pdf' });
-    formData.append('file', blob, req.file.originalname);
+    formData.append('file', blob, originalName);
 
     const aiResponse = await fetchWithTimeout(`${AI_SERVICE_URL}/extract`, {
       method: 'POST',
@@ -69,17 +62,18 @@ router.post('/', upload.single('file'), async (req, res) => {
     if (!aiResponse.ok) {
       const error = await aiResponse.json();
       await prisma.document.update({
-        where: { id: document.id },
+        where: { id: documentId },
         data: { status: 'failed' },
       });
-      return res.status(500).json({ error: error.detail || 'Extraction failed' });
+      console.error('Extraction failed:', error);
+      return;
     }
 
     const { extractedText } = await aiResponse.json();
 
     // Step 2: Extract structured clauses via AI
     await prisma.document.update({
-      where: { id: document.id },
+      where: { id: documentId },
       data: { status: 'analyzing' },
     });
 
@@ -88,7 +82,7 @@ router.post('/', upload.single('file'), async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        documentId: document.id,
+        documentId,
         extractedText,
       }),
     }, clauseTimeout);
@@ -96,17 +90,18 @@ router.post('/', upload.single('file'), async (req, res) => {
     if (!clauseRes.ok) {
       const error = await clauseRes.json();
       await prisma.document.update({
-        where: { id: document.id },
+        where: { id: documentId },
         data: { status: 'failed' },
       });
-      return res.status(500).json({ error: error.detail || 'Clause extraction failed' });
+      console.error('Clause extraction failed:', error);
+      return;
     }
 
     const clauseData = await clauseRes.json();
 
     // Step 3: Fetch stored clauses and run flag engine
     const storedClauses = await prisma.extractedClause.findMany({
-      where: { documentId: document.id },
+      where: { documentId },
     });
 
     const flagEngineClauses = storedClauses.map(c => ({
@@ -132,7 +127,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     }
 
     // Step 4: Run flag matching and scoring
-    const { flags: flagEngineFlags, score: flagScore } = matchFlags(flagEngineClauses);
+    const { flags: flagEngineFlags } = matchFlags(flagEngineClauses);
     const policyScore = computePolicyScore(flagEngineClauses, insurerName);
 
     // Step 5: Store flags in DB
@@ -147,7 +142,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
       const stored = await prisma.flag.create({
         data: {
-          documentId: document.id,
+          documentId,
           clauseId: matchClause?.id || null,
           taxonomyId: flag.taxonomyId,
           colorType: flag.colorType,
@@ -162,12 +157,12 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     // Step 6: Store policy health score
     const existingScore = await prisma.policyHealthScore.findUnique({
-      where: { documentId: document.id },
+      where: { documentId },
     });
 
     if (existingScore) {
       await prisma.policyHealthScore.update({
-        where: { documentId: document.id },
+        where: { documentId },
         data: {
           score: policyScore.score,
           breakdown: policyScore.breakdown,
@@ -177,7 +172,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     } else {
       await prisma.policyHealthScore.create({
         data: {
-          documentId: document.id,
+          documentId,
           score: policyScore.score,
           breakdown: policyScore.breakdown,
           settlementRatio: policyScore.settlementRatio,
@@ -186,51 +181,114 @@ router.post('/', upload.single('file'), async (req, res) => {
     }
 
     await prisma.document.update({
-      where: { id: document.id },
+      where: { id: documentId },
       data: updateData,
     });
 
     // Step 7: Store retrieval chunks so grounded chat works
-    let embedWarning: string | undefined;
     try {
       const embedRes = await fetchWithTimeout(`${AI_SERVICE_URL}/embed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          documentId: document.id,
+          documentId,
           text: extractedText,
         }),
       }, 60000);
       if (!embedRes.ok) {
         const embedErr = await embedRes.json();
-        embedWarning = embedErr.detail || `Embed failed with status ${embedRes.status}`;
+        console.error('Embed failed:', embedErr.detail || `Embed failed with status ${embedRes.status}`);
       }
     } catch (embedError) {
-      embedWarning = embedError instanceof Error ? embedError.message : 'Embed failed';
+      console.error('Embed failed:', embedError);
     }
 
     // Clean up uploaded file
-    fs.unlinkSync(req.file.path);
+    fs.unlinkSync(filePath);
+    console.log(`Analysis complete for document ${documentId}`);
+  } catch (error) {
+    console.error('Analysis pipeline error:', error);
+    try {
+      await prisma.document.update({
+        where: { id: documentId },
+        data: { status: 'failed' },
+      });
+    } catch (_) {
+      // document may not exist if this raced a deletion
+    }
+    try {
+      fs.unlinkSync(filePath);
+    } catch (_) {
+      // file may already be gone
+    }
+  }
+}
 
-    res.json({
-      documentId: document.id,
-      status: 'analyzed',
-      flags: storedFlags,
-      score: {
-        score: policyScore.score,
-        maxScore: policyScore.maxScore,
-        breakdown: policyScore.breakdown,
-        settlementRatio: policyScore.settlementRatio,
-        settlementRatioMatchedInsurer: policyScore.settlementRatioMatchedInsurer,
+router.post('/', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const document = await prisma.document.create({
+      data: {
+        fileName: req.file.originalname,
+        status: 'extracting',
       },
-      insurerName,
-      sumInsured: typeof extraction.sum_insured === 'number' ? extraction.sum_insured : null,
-      embedWarning,
-      message: 'Analysis complete',
+    });
+
+    // Respond immediately with the document id and initial status; the heavy
+    // pipeline (raw extract → LLM clause extraction → flag engine → embed)
+    // runs in the background and the frontend polls /:id/status for progress.
+    res.status(202).json({
+      documentId: document.id,
+      status: 'extracting',
+    });
+
+    runAnalysisPipeline(document.id, req.file.path, req.file.originalname).catch((err) => {
+      console.error('Unhandled pipeline error:', err);
     });
   } catch (error) {
     console.error('Upload error:', error);
     res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+// Polling endpoint the frontend uses to track the background pipeline.
+router.get('/:id/status', async (req, res) => {
+  try {
+    const document = await prisma.document.findUnique({
+      where: { id: req.params.id },
+      include: { flags: true, score: true },
+    });
+
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    if (document.status !== 'analyzed') {
+      return res.json({ documentId: document.id, status: document.status });
+    }
+
+    const flags = document.flags;
+    const score = document.score;
+
+    res.json({
+      documentId: document.id,
+      status: 'analyzed',
+      flags,
+      score: score ? {
+        score: score.score,
+        maxScore: 100,
+        breakdown: score.breakdown,
+        settlementRatio: score.settlementRatio,
+      } : null,
+      insurerName: document.insurerName,
+      sumInsured: document.sumInsured,
+    });
+  } catch (error) {
+    console.error('Document status error:', error);
+    res.status(500).json({ error: 'Failed to fetch document status' });
   }
 });
 
