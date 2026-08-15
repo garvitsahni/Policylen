@@ -305,7 +305,7 @@ def call_gemini(system_prompt: str, user_prompt: str, *, model: str = None, max_
                 }
             # Fail fast on auth errors — a bad key will not heal on retry, and
             # each backoff cycle wastes seconds before the fallback chain moves on.
-            if any(token in error_str for token in ("PERMISSION_DENIED", "UNAUTHENTICATED", "403", "401", "API key not valid")) or "invalid key" in lower or "not valid" in lower:
+            if any(token in error_str for token in ("PERMISSION_DENIED", "UNAUTHENTICATED", "403", "401", "API key not valid")) or "invalid key" in lower:
                 return {
                     "answer": None,
                     "grounded": False,

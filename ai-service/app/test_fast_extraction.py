@@ -85,6 +85,15 @@ class GeminiAuthFailFastTests(unittest.TestCase):
         self.assertEqual(client.models.generate_content.call_count, 1)
         sleep.assert_not_called()
 
+    def test_transient_error_still_retries(self):
+        client = self._make_client(RuntimeError('503 Service Unavailable'))
+        with mock.patch.object(main, '_get_gemini_client', return_value=client), \
+             mock.patch.object(main.time, 'sleep') as sleep:
+            result = main.call_gemini('sys', 'user')
+        self.assertIsNone(result['answer'])
+        self.assertEqual(client.models.generate_content.call_count, main.MAX_RETRIES)
+        sleep.assert_called()
+
 
 if __name__ == '__main__':
     unittest.main()
