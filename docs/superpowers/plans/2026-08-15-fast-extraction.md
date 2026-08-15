@@ -76,7 +76,7 @@ class ExtractionChainTests(unittest.TestCase):
         with mock.patch.object(main, 'call_gemini', return_value=_err('gemini down')), \
              mock.patch.object(main, 'call_openrouter', return_value=_err('or down')), \
              mock.patch.object(main, 'call_nvidia', return_value=_err('nv down')), \
-             mock.patch.object(main, 'call_groq', return_value=_err('groq down')):
+             mock.patch.object(main, 'groq_extract_chunked', return_value=_err('groq down')):
             result = main.call_llm('sys', 'user', extraction=True, max_tokens=8192, temperature=0.1,
                                    response_schema=main.EXTRACTION_SCHEMA, response_json=True)
         self.assertIsNone(result['answer'])
@@ -181,6 +181,15 @@ class GeminiAuthFailFastTests(unittest.TestCase):
         self.assertIn('quota exhausted', result['raw_error'])
         self.assertEqual(client.models.generate_content.call_count, 1)
         sleep.assert_not_called()
+
+    def test_transient_error_still_retries(self):
+        client = self._make_client(RuntimeError('503 Service Unavailable'))
+        with mock.patch.object(main, '_get_gemini_client', return_value=client), \
+             mock.patch.object(main.time, 'sleep') as sleep:
+            result = main.call_gemini('sys', 'user')
+        self.assertIsNone(result['answer'])
+        self.assertEqual(client.models.generate_content.call_count, main.MAX_RETRIES)
+        sleep.assert_called()
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -229,7 +238,7 @@ to:
                 }
             # Fail fast on auth errors — a bad key will not heal on retry, and
             # each backoff cycle wastes seconds before the fallback chain moves on.
-            if any(token in error_str for token in ("PERMISSION_DENIED", "UNAUTHENTICATED", "403", "401", "API key not valid")) or "invalid key" in lower or "not valid" in lower:
+            if any(token in error_str for token in ("PERMISSION_DENIED", "UNAUTHENTICATED", "403", "401", "API key not valid")) or "invalid key" in lower:
                 return {
                     "answer": None,
                     "grounded": False,
@@ -290,7 +299,7 @@ class HttpSessionTests(unittest.TestCase):
                 model='m', max_tokens=10, temperature=0.1, response_json=False)
         self.assertEqual(result['answer'], 'ok')
         s.post.assert_called_once()
-        self.assertIn('example.com/chat/completions', s.post.call_args.args[0])
+        self.assertIn('/chat/completions', s.post.call_args.args[0])
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -342,13 +351,13 @@ git commit -m "feat: reuse shared HTTP session across provider calls"
 - Consumes: Task 1-3 changes live in `ai-service/app/main.py`; the AI service must be restarted to pick them up.
 - Produces: Measured before/after elapsed time per sample PDF, proving the sub-minute goal and that extraction output is unchanged.
 
-- [ ] **Step 1: Fix stale `.env` comments**
+- [x] **Step 1: Fix stale `.env` comments**
 
 In `.env`:
 - Lines 16-19 currently say OpenRouter is the "primary free provider". Rewrite the block to describe Gemini 2.0 Flash as the primary extraction provider and OpenRouter as the fallback. Keep the rate-limit notes accurate.
 - Lines 41-42 say extraction completes in ~190s on free-tier Groq. Update to note the Gemini-primary chain targets under a minute, but keep `CLAUSE_EXTRACTION_TIMEOUT_MS=360000` generous so slow fallback paths still complete.
 
-- [ ] **Step 2: Restart the AI service**
+- [x] **Step 2: Restart the AI service**
 
 If the AI service is running, restart it so the new `main.py` loads:
 ```bash
@@ -357,7 +366,7 @@ If the AI service is running, restart it so the new `main.py` loads:
 ```
 Run `curl -s http://localhost:8001/health` (or open in browser) — expected `{"status":"ok"}`.
 
-- [ ] **Step 3: Time extraction on all sample PDFs**
+- [x] **Step 3: Time extraction on all sample PDFs**
 
 For each PDF in `samples/`, POST it to the running service and measure elapsed time. From the repo root, using PowerShell:
 ```powershell
@@ -370,13 +379,23 @@ $sw.Stop()
 Repeat for `a370272f732749999e7c19e82e38ad7c.pdf`, `chi-prospectus.pdf`, `m4-5f.pdf` using their matching `tmp_extracts/*.txt` files.
 Expected: each completes in under 60s (success criteria) with a non-zero `clauses` count. Capture and paste the raw timing output.
 
-- [ ] **Step 4: Confirm no extraction regression**
+- [x] **Step 4: Confirm no extraction regression**
 
 Check the returned `extraction` JSON for each sample still contains `insurer_name`, `sum_insured`, and clause groups (`room_rent_clause`, `co_pay`, `waiting_periods`, `sub_limits`, `exclusions`). Compare against the `clauses` structure from a pre-change run (see `backend/src/routes/__tests__/documents-extraction-fallback.test.ts` and prior `tmp_extracts` fixtures) — the shape must be unchanged.
 
-- [ ] **Step 5: Update the spec's verification note and commit**
+- [x] **Step 5: Update the spec's verification note and commit**
 
 Record the measured times in `docs/superpowers/specs/2026-08-15-fast-extraction-design.md` under "Verification". Then commit only source/test changes if any were made during verification (there should be none — the code changes were committed in Tasks 1-3). If no code changed, note the verification was already committed and skip the commit.
+
+> **Verification deviation (controller note):** the plan expected zero code changes in Task 4,
+> but end-to-end timing surfaced three real defects that blocked the sub-minute success
+> criterion and had to be fixed in this branch: (1) `gemini-2.0-flash` is retired by Google
+> (404) so extraction silently fell through to the slow OpenRouter 120B; (2) extraction JSON
+> exceeded the 8192 output-token cap, truncating the response (`finish_reason=MAX_TOKENS`)
+> into invalid JSON; (3) Gemini 2.5 thinking mode added ~15-20s per call. Fixes committed:
+> `gemini-2.5-flash`, `GEMINI_EXTRACTION_MAX_TOKENS=65536` (Gemini extraction path only),
+> `GEMINI_THINKING_BUDGET=0`. Results moved from 77-210s / invalid JSON to 18.7-44.4s /
+> valid output. These are within this branch's scope (making Gemini the working primary).
 
 ---
 

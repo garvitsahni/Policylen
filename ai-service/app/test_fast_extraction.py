@@ -48,6 +48,24 @@ class ExtractionChainTests(unittest.TestCase):
         self.assertIn('gemini', result['raw_error'])
         self.assertIn('groq', result['raw_error'])
 
+    def test_gemini_extraction_uses_expanded_token_budget(self):
+        with mock.patch.object(main, 'call_gemini', return_value=_ok()) as g, \
+             mock.patch.object(main, 'call_openrouter', return_value=_err('should not be called')):
+            main.call_llm('sys', 'user', extraction=True, max_tokens=8192, temperature=0.1,
+                          response_schema=main.EXTRACTION_SCHEMA, response_json=True)
+        _, kwargs = g.call_args
+        self.assertEqual(kwargs['max_tokens'], main.GEMINI_EXTRACTION_MAX_TOKENS)
+
+    def test_gemini_chat_keeps_normal_token_budget(self):
+        with mock.patch.object(main, 'call_openrouter', return_value=_err('or down')), \
+             mock.patch.object(main, 'call_groq', return_value=_err('groq down')), \
+             mock.patch.object(main, 'call_nvidia', return_value=_err('nv down')), \
+             mock.patch.object(main, 'call_gemini', return_value=_ok()) as g:
+            main.call_llm('sys', 'user', chat=True, max_tokens=1024, temperature=0.1,
+                          response_schema=None, response_json=False)
+        _, kwargs = g.call_args
+        self.assertEqual(kwargs['max_tokens'], 1024)
+
 
 class GeminiAuthFailFastTests(unittest.TestCase):
 
@@ -93,6 +111,18 @@ class GeminiAuthFailFastTests(unittest.TestCase):
         self.assertIsNone(result['answer'])
         self.assertEqual(client.models.generate_content.call_count, main.MAX_RETRIES)
         sleep.assert_called()
+
+    def test_gemini_disables_thinking_by_default(self):
+        response = mock.Mock()
+        response.text = '{"ok": true}'
+        response.prompt_feedback = None
+        client = mock.Mock()
+        client.models.generate_content.return_value = response
+        with mock.patch.object(main, '_get_gemini_client', return_value=client):
+            main.call_gemini('sys', 'user')
+        call_kwargs = client.models.generate_content.call_args.kwargs
+        config = call_kwargs['config']
+        self.assertEqual(config.thinking_config.thinking_budget, main.GEMINI_THINKING_BUDGET)
 
 
 class HttpSessionTests(unittest.TestCase):

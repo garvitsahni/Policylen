@@ -40,8 +40,20 @@ app.add_middleware(
 TAXONOMY_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'taxonomy.json')
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-GEMINI_CHAT_MODEL = os.getenv("GEMINI_CHAT_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_CHAT_MODEL = os.getenv("GEMINI_CHAT_MODEL", "gemini-2.5-flash")
+
+# Extraction output can exceed 8192 tokens (all exclusions + waiting-period
+# arrays), which truncates the JSON with finish_reason=MAX_TOKENS and yields
+# invalid output. Gemini allows up to 65536 output tokens, so extraction gets
+# its own larger budget. Fallback providers keep their own, smaller limits.
+GEMINI_EXTRACTION_MAX_TOKENS = int(os.getenv("GEMINI_EXTRACTION_MAX_TOKENS", "65536"))
+
+# Gemini 2.5+ models default to extended "thinking" before answering. For a
+# structured extraction that just fills a JSON schema, thinking burns tens of
+# seconds of latency for no accuracy gain — disable it (budget 0). Can be
+# raised via env if a future schema ever needs reasoning.
+GEMINI_THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
@@ -271,6 +283,7 @@ def call_gemini(system_prompt: str, user_prompt: str, *, model: str = None, max_
         "system_instruction": system_prompt,
         "temperature": temperature,
         "max_output_tokens": max_tokens,
+        "thinking_config": genai_types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET),
     }
     if response_schema is not None:
         config["response_mime_type"] = "application/json"
@@ -361,7 +374,10 @@ def call_llm(system_prompt: str, user_prompt: str, *, extraction: bool = False, 
     for name, fn, extra in chain:
         kwargs = dict(extra)
         if name == "gemini":
-            result = fn(system_prompt, user_prompt, max_tokens=max_tokens, temperature=temperature, **kwargs)
+            if extraction:
+                result = fn(system_prompt, user_prompt, max_tokens=GEMINI_EXTRACTION_MAX_TOKENS, temperature=temperature, **kwargs)
+            else:
+                result = fn(system_prompt, user_prompt, max_tokens=max_tokens, temperature=temperature, **kwargs)
         elif extraction and name == "groq":
             # For extraction with Groq, use chunked extraction to respect TPM limits.
             # Extract the text portion from user_prompt and use groq_extract_chunked.

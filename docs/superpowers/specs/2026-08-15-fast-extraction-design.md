@@ -73,3 +73,35 @@ behavior change.
 - Confirm the Gemini fail-fast path returns immediately on a bad key
   (unit-level check) and that the chain falls through to OpenRouter.
 - Show raw elapsed-time output before/after per AGENTS.md §3.
+
+### Measured end-to-end (Task 4, 2026-08-15)
+
+AI service: `uvicorn app.main:app --port 8001`; PostgreSQL via `docker compose up -d postgres`.
+All four samples extracted via `POST /extract-clauses` with their matching `tmp_extracts/*.txt`,
+real `Document` rows (FK satisfied). 10 clauses each, `partial=False`.
+
+**Before this branch's fixes (Gemini was fallback, deprecated `gemini-2.0-flash`):**
+the deprecated model 404'd so extraction fell through to the slow OpenRouter 120B —
+77–210s and multiple invalid-JSON/DB failures.
+
+**After fixes (`gemini-2.5-flash`, `GEMINI_EXTRACTION_MAX_TOKENS=65536`, thinking disabled):**
+
+| Sample | Elapsed | Clauses | Partial | Insurer |
+|---|---|---|---|---|
+| 20240325_Prospectus_IHIP.pdf | 34.2s | 10 | false | United India Insurance Company Limited |
+| a370272f732749999e7c19e82e38ad7c.pdf | 44.4s | 10 | false | SBI General Insurance Company Limited |
+| chi-prospectus.pdf | 36.1s | 10 | false | Universal Sompo General Insurance Company Limited |
+| m4-5f.pdf | 18.7s | 10 | false | (null) |
+
+All under the 60s success criterion. `sum_insured` varies run-to-run because the
+prospectuses list multiple SI options (2–20 Lakhs) rather than a single schedule value;
+that is pre-existing LLM variance, not a regression.
+
+**Fixes surfaced by verification (all committed in this branch):**
+1. `gemini-2.0-flash` is retired by Google (404 on API); moved to `gemini-2.5-flash` in
+   `.env` and `main.py` defaults.
+2. Extraction JSON can exceed 8192 output tokens → `finish_reason=MAX_TOKENS` → truncated
+   invalid JSON. Added `GEMINI_EXTRACTION_MAX_TOKENS=65536`, applied only to the Gemini
+   extraction path (`main.py:call_llm`).
+3. Gemini 2.5 thinking mode added ~15–20s per call for no accuracy gain on schema-filling.
+   Added `GEMINI_THINKING_BUDGET=0` (`main.py:call_gemini`), env-tunable.
